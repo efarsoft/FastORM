@@ -169,6 +169,11 @@ __all__ = [
     'Seeder', 'DatabaseSeeder',
     'TestCase', 'DatabaseTestCase', 
     'faker', 'ChineseProvider', 'CompanyProvider', 'TestDataProvider',
+    
+    # 性能监控 (Stage 9)
+    'QueryProfiler', 'PerformanceMonitor', 'N1Detector', 'PerformanceReporter',
+    'profile_query', 'start_monitoring', 'stop_monitoring', 
+    'get_performance_stats', 'print_performance_summary',
 ]
 
 # =============================================================================
@@ -356,6 +361,41 @@ def __getattr__(name: str) -> Any:
     elif name == "config_manager":
         from fastorm.config.manager import config_manager
         return config_manager
+    
+    # 测试支持 (Stage 8)
+    elif name in ["Factory", "trait", "LazyAttribute", "Sequence"]:
+        from fastorm.testing.factory import Factory, trait, LazyAttribute, Sequence
+        return locals()[name]
+    elif name in ["Seeder", "DatabaseSeeder"]:
+        from fastorm.testing.seeder import Seeder, DatabaseSeeder
+        return locals()[name]
+    elif name in ["TestCase", "DatabaseTestCase"]:
+        from fastorm.testing.testcase import TestCase, DatabaseTestCase
+        return locals()[name]
+    elif name in ["faker", "ChineseProvider", "CompanyProvider", "TestDataProvider"]:
+        from fastorm.testing.faker_providers import (
+            faker, ChineseProvider, CompanyProvider, TestDataProvider
+        )
+        return locals()[name]
+    
+    # 性能监控 (Stage 9)
+    elif name in ["QueryProfiler", "profile_query"]:
+        from fastorm.performance.profiler import QueryProfiler, profile_query
+        return locals()[name]
+    elif name in ["PerformanceMonitor", "start_monitoring", "stop_monitoring"]:
+        from fastorm.performance.monitor import (
+            PerformanceMonitor, start_monitoring, stop_monitoring
+        )
+        return locals()[name]
+    elif name == "N1Detector":
+        from fastorm.performance.detector import N1Detector
+        return N1Detector
+    elif name in ["PerformanceReporter", "get_performance_stats", "print_performance_summary"]:
+        from fastorm.performance.reporter import (
+            PerformanceReporter, generate_report as get_performance_stats,
+            print_performance_summary
+        )
+        return locals()[name] if name != "get_performance_stats" else get_performance_stats
     
     raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
 
