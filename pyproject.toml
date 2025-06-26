@@ -1,0 +1,280 @@
+[build-system]
+requires = ["hatchling>=1.21.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "fastorm"
+version = "1.0.0"
+description = "🚀 专为FastAPI优化的现代异步ORM框架 - FastAPI + SQLAlchemy 2.0 + Pydantic 2.11 的完美融合"
+readme = "README.md"
+license = {file = "LICENSE"}
+authors = [
+    {name = "FastORM Team", email = "team@fastorm.dev"},
+]
+maintainers = [
+    {name = "FastORM Team", email = "team@fastorm.dev"},
+]
+keywords = [
+    "fastapi",
+    "sqlalchemy", 
+    "pydantic",
+    "orm",
+    "async",
+    "database",
+    "python",
+    "type-safe",
+    "modern"
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11", 
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Framework :: FastAPI",
+    "Framework :: AsyncIO",
+    "Topic :: Database",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Internet :: WWW/HTTP :: Dynamic Content",
+    "Typing :: Typed"
+]
+requires-python = ">=3.10"
+
+# 核心依赖 - 严格版本控制确保兼容性
+dependencies = [
+    # SQLAlchemy 2.0.40+ - 最新稳定版本，支持所有现代特性
+    "sqlalchemy[asyncio]>=2.0.40,<2.1.0",
+    
+    # Pydantic 2.11+ - 最新验证和序列化特性
+    "pydantic>=2.11.0,<3.0.0",
+    "pydantic-settings>=2.6.0,<3.0.0",
+    
+    # 基础数据库支持 - 开箱即用
+    "aiosqlite>=0.20.0,<1.0.0",
+    
+    # 异步支持
+    "typing-extensions>=4.12.0",
+    "annotated-types>=0.7.0",
+]
+
+[project.optional-dependencies]
+# FastAPI集成
+fastapi = [
+    "fastapi>=0.115.12,<1.0.0",
+    "uvicorn[standard]>=0.34.0,<1.0.0",
+]
+
+# 数据库驱动
+postgresql = [
+    "asyncpg>=0.29.0,<1.0.0",
+    "psycopg[binary]>=3.2.0,<4.0.0",
+]
+mysql = [
+    "aiomysql>=0.2.0,<1.0.0",
+    "asyncmy>=0.2.9,<1.0.0",
+]
+# SQLite现在已包含在核心依赖中，无需额外安装
+
+# 缓存支持
+cache = [
+    "redis[hiredis]>=5.2.0,<6.0.0",
+    "aiocache>=0.12.3,<1.0.0",
+]
+
+# 开发工具
+dev = [
+    "pytest>=8.3.0,<9.0.0",
+    "pytest-asyncio>=0.24.0,<1.0.0",
+    "pytest-cov>=6.0.0,<7.0.0",
+    "pytest-xdist>=3.6.0,<4.0.0",
+    "black>=24.10.0,<25.0.0",
+    "ruff>=0.8.0,<1.0.0",
+    "mypy>=1.13.0,<2.0.0",
+    "pre-commit>=4.0.0,<5.0.0",
+]
+
+# 文档生成
+docs = [
+    "mkdocs>=1.6.0,<2.0.0",
+    "mkdocs-material>=9.5.0,<10.0.0", 
+    "mkdocstrings[python]>=0.27.0,<1.0.0",
+]
+
+# 性能分析
+profiling = [
+    "py-spy>=0.3.14,<1.0.0",
+    "memory-profiler>=0.61.0,<1.0.0",
+]
+
+# 完整安装包含所有功能
+full = [
+    "fastorm[fastapi,postgresql,mysql,cache]"
+]
+
+[project.urls]
+Homepage = "https://fastorm.dev"
+Documentation = "https://fastorm.dev/docs"
+Repository = "https://github.com/fastorm/fastorm"
+Issues = "https://github.com/fastorm/fastorm/issues"
+Changelog = "https://github.com/fastorm/fastorm/blob/main/CHANGELOG.md"
+Sponsor = "https://github.com/sponsors/fastorm"
+
+[project.scripts]
+fastorm = "fastorm.cli:main"
+
+[tool.hatch.version]
+path = "fastorm/__init__.py"
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/fastorm",
+    "/tests",
+    "/docs",
+    "/README.md",
+    "/LICENSE",
+    "/CHANGELOG.md",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["fastorm"]
+
+# 测试配置
+[tool.pytest.ini_options]
+minversion = "8.0"
+addopts = [
+    "--strict-markers",
+    "--strict-config", 
+    "--cov=fastorm",
+    "--cov-report=term-missing",
+    "--cov-report=html",
+    "--cov-report=xml",
+    "--cov-fail-under=95",
+    "-ra",
+]
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+    "unit: marks tests as unit tests",
+    "benchmark: marks tests as benchmark tests",
+]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+
+# 代码格式化
+[tool.black]
+target-version = ["py310", "py311", "py312", "py313"]
+line-length = 88
+skip-string-normalization = true
+extend-exclude = '''
+/(
+    \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | _build
+  | buck-out
+  | build
+  | dist
+)/
+'''
+
+# Ruff配置 - 现代Python linter
+[tool.ruff]
+target-version = "py310"
+line-length = 88
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "UP",  # pyupgrade
+    "ARG", # flake8-unused-arguments
+    "SIM", # flake8-simplify
+    "TCH", # flake8-type-checking
+    "RUF", # Ruff-specific rules
+]
+ignore = [
+    "E501",  # line too long, handled by black
+    "B008",  # do not perform function calls in argument defaults
+    "B904",  # Allow `raise` without `from` in exception handlers
+    "C901",  # too complex
+]
+unfixable = [
+    "F841", # Don't remove unused variables
+]
+
+[tool.ruff.per-file-ignores]
+"__init__.py" = ["F401"]
+"tests/**/*" = ["S101", "ARG", "FBT"]
+
+[tool.ruff.isort]
+known-first-party = ["fastorm"]
+force-single-line = true
+single-line-exclusions = ["typing"]
+
+# MyPy类型检查
+[tool.mypy]
+python_version = "3.10"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+extra_checks = true
+
+[[tool.mypy.overrides]]
+module = [
+    "sqlalchemy.*",
+    "alembic.*",
+    "asyncpg.*",
+    "aiomysql.*",
+    "aiosqlite.*",
+]
+ignore_missing_imports = true
+
+# Coverage配置  
+[tool.coverage.run]
+source = ["fastorm"]
+branch = true
+omit = [
+    "tests/*",
+    "fastorm/__init__.py",
+    "*/migrations/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if self.debug:",
+    "if settings.DEBUG",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if 0:",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
+]
+show_missing = true
+precision = 2 
