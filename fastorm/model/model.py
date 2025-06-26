@@ -21,6 +21,7 @@ from sqlalchemy.orm import (
 
 from fastorm.core.session_manager import execute_with_session
 from fastorm.mixins.events import EventMixin
+from fastorm.mixins.pydantic_integration import PydanticIntegrationMixin
 
 if TYPE_CHECKING:
     from fastorm.query.builder import QueryBuilder
@@ -47,18 +48,23 @@ class DeclarativeBase(SQLAlchemyDeclarativeBase):
     )
 
 
-class Model(DeclarativeBase, EventMixin):
+class Model(DeclarativeBase, EventMixin, PydanticIntegrationMixin):
     """FastORM模型基类
     
-    实现真正简洁的API，无需手动管理session，自动集成事件系统。
+    实现真正简洁的API，无需手动管理session，自动集成事件系统和Pydantic V2验证。
     
     示例:
     ```python
-    # 🎯 简洁如ThinkORM + 事件支持
+    # 🎯 简洁如ThinkORM + 事件支持 + Pydantic验证
     user = await User.create(name='John', email='john@example.com')
     users = await User.where('age', '>', 18).limit(10).get()
     await user.update(name='Jane')
     await user.delete()
+    
+    # Pydantic验证和序列化
+    user_dict = user.to_dict()
+    user_json = user.to_json()
+    schema = User.get_pydantic_schema()
     
     # 事件处理器自动工作
     class User(Model):
