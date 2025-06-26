@@ -163,6 +163,12 @@ __all__ = [
     # 初始化函数
     "init",
     "setup_fastapi",
+    
+    # 测试支持 (Stage 8)
+    'Factory', 'trait', 'LazyAttribute', 'Sequence',
+    'Seeder', 'DatabaseSeeder',
+    'TestCase', 'DatabaseTestCase', 
+    'faker', 'ChineseProvider', 'CompanyProvider', 'TestDataProvider',
 ]
 
 # =============================================================================
