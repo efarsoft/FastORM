@@ -22,6 +22,7 @@ from sqlalchemy.orm import (
 from fastorm.core.session_manager import execute_with_session
 from fastorm.mixins.events import EventMixin
 from fastorm.mixins.pydantic_integration import PydanticIntegrationMixin
+from fastorm.mixins.scopes import ScopeMixin, create_scoped_query
 
 if TYPE_CHECKING:
     from fastorm.query.builder import QueryBuilder
@@ -48,7 +49,7 @@ class DeclarativeBase(SQLAlchemyDeclarativeBase):
     )
 
 
-class Model(DeclarativeBase, EventMixin, PydanticIntegrationMixin):
+class Model(DeclarativeBase, EventMixin, PydanticIntegrationMixin, ScopeMixin):
     """FastORM模型基类
     
     实现真正简洁的API，无需手动管理session，自动集成事件系统和Pydantic V2验证。
@@ -448,18 +449,22 @@ class Model(DeclarativeBase, EventMixin, PydanticIntegrationMixin):
     
     @classmethod
     def query(cls: Type[T]) -> 'QueryBuilder[T]':
-        """创建查询构建器
+        """创建作用域查询构建器
         
         Returns:
-            查询构建器实例
+            作用域查询构建器实例（自动应用全局作用域）
             
         Example:
-            users = await User.query()\
-                              .where('age', '>', 18)\
-                              .order_by('name').get()
+            # 基础查询
+            users = await User.query().where('age', '>', 18).get()
+            
+            # 使用作用域
+            active_users = await User.query().active().get()
+            
+            # 移除全局作用域
+            all_users = await User.query().without_global_scopes().get()
         """
-        from fastorm.query.builder import QueryBuilder
-        return QueryBuilder(cls)
+        return create_scoped_query(cls)
     
     def to_dict(self, exclude: Optional[List[str]] = None) -> Dict[str, Any]:
         """转换为字典

@@ -6,18 +6,22 @@ FastORM 查询构建器
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Type, TypeVar, Generic, Union, Callable, TYPE_CHECKING
+from typing import (
+    Any, Dict, List, Optional, Type, TypeVar, Generic, Union, Callable, 
+    TYPE_CHECKING
+)
 
-from sqlalchemy import select, and_, asc, desc, func, text
+from sqlalchemy import select, and_, asc, desc, func
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload, joinedload
 
-from fastorm.core.session_manager import execute_with_session, get_session
+from fastorm.core.session_manager import execute_with_session
 
 T = TypeVar('T')
 
 if TYPE_CHECKING:
     from sqlalchemy.sql import Select
+    from fastorm.query.pagination import Paginator, SimplePaginator
+    from fastorm.query.batch import BatchProcessor
 
 
 class QueryBuilder(Generic[T]):
@@ -366,21 +370,32 @@ class QueryBuilder(Generic[T]):
     async def paginate(
         self, 
         page: int = 1, 
-        per_page: int = 15
-    ) -> Dict[str, Any]:
-        """分页查询
+        per_page: int = 15,
+        path: Optional[str] = None,
+        query_params: Optional[Dict[str, Any]] = None
+    ) -> 'Paginator[T]':
+        """高级分页查询
         
         Args:
             page: 页码（从1开始）
             per_page: 每页记录数
+            path: 基础路径（用于生成分页链接）
+            query_params: 查询参数（用于生成分页链接）
             
         Returns:
-            包含分页信息的字典
+            Paginator实例，包含完整分页信息
             
         Example:
-            result = await User.where('status', 'active')\
-                               .paginate(page=2, per_page=10)
+            paginator = await User.where('status', 'active')\
+                                  .paginate(page=2, per_page=10)
+            
+            print(f"总记录数: {paginator.total}")
+            print(f"当前页: {paginator.current_page}")
+            for user in paginator.items:
+                print(user.name)
         """
+        from fastorm.query.pagination import create_paginator
+        
         # 计算偏移量
         offset = (page - 1) * per_page
         
@@ -390,22 +405,134 @@ class QueryBuilder(Generic[T]):
         # 获取当页数据
         items = await self.offset(offset).limit(per_page).get()
         
-        # 计算分页信息
-        total_pages = (total + per_page - 1) // per_page
-        has_prev = page > 1
-        has_next = page < total_pages
+        return create_paginator(
+            items=items,
+            total=total,
+            per_page=per_page,
+            current_page=page,
+            path=path,
+            query_params=query_params
+        )
+    
+    async def simple_paginate(
+        self, 
+        page: int = 1, 
+        per_page: int = 15,
+        path: Optional[str] = None,
+        query_params: Optional[Dict[str, Any]] = None
+    ) -> 'SimplePaginator[T]':
+        """简单分页查询（不计算总数）
         
-        return {
-            'items': items,
-            'total': total,
-            'page': page,
-            'per_page': per_page,
-            'total_pages': total_pages,
-            'has_prev': has_prev,
-            'has_next': has_next,
-            'prev_page': page - 1 if has_prev else None,
-            'next_page': page + 1 if has_next else None,
-        } 
+        Args:
+            page: 页码（从1开始）
+            per_page: 每页记录数
+            path: 基础路径
+            query_params: 查询参数
+            
+        Returns:
+            SimplePaginator实例
+            
+        Example:
+            paginator = await User.where('status', 'active')\
+                                  .simple_paginate(page=2, per_page=10)
+        """
+        from fastorm.query.pagination import create_simple_paginator
+        
+        # 计算偏移量
+        offset = (page - 1) * per_page
+        
+        # 获取数据（多取一条判断是否还有更多）
+        items = await self.offset(offset).limit(per_page + 1).get()
+        
+        # 检查是否还有更多数据
+        has_more = len(items) > per_page
+        if has_more:
+            items = items[:per_page]
+        
+        return create_simple_paginator(
+            items=items,
+            per_page=per_page,
+            current_page=page,
+            has_more=has_more,
+            path=path,
+            query_params=query_params
+        )
+    
+    def batch(self) -> 'BatchProcessor[T]':
+        """获取批量处理器
+        
+        Returns:
+            批量处理器实例
+            
+        Example:
+            # 分块处理
+            await User.where('active', True).batch().chunk(100, process_users)
+            
+            # 批量更新
+            await User.where('status', 'pending').batch().batch_update({
+                'status': 'processed'
+            })
+        """
+        from fastorm.query.batch import BatchProcessor
+        return BatchProcessor(self)
+    
+    async def chunk(
+        self, 
+        size: int, 
+        callback: Callable[[List[T]], Any],
+        preserve_order: bool = True
+    ) -> int:
+        """分块处理数据的便捷方法
+        
+        Args:
+            size: 每块的大小
+            callback: 处理函数
+            preserve_order: 是否保持处理顺序
+            
+        Returns:
+            处理的总记录数
+        """
+        return await self.batch().chunk(size, callback, preserve_order)
+    
+    async def each(
+        self, 
+        callback: Callable[[T], Any], 
+        chunk_size: int = 100
+    ) -> int:
+        """逐个处理记录的便捷方法
+        
+        Args:
+            callback: 处理函数
+            chunk_size: 内部分块大小
+            
+        Returns:
+            处理的总记录数
+        """
+        return await self.batch().each(callback, chunk_size)
+    
+    def _apply_conditions(self, source_builder: 'QueryBuilder[T]') -> 'QueryBuilder[T]':
+        """应用另一个查询构建器的条件到当前构建器
+        
+        Args:
+            source_builder: 源查询构建器
+            
+        Returns:
+            应用条件后的新查询构建器
+        """
+        new_builder = QueryBuilder(self._model_class)
+        
+        # 复制条件
+        new_builder._conditions = source_builder._conditions.copy()
+        new_builder._order_clauses = source_builder._order_clauses.copy()
+        new_builder._limit_value = source_builder._limit_value
+        new_builder._offset_value = source_builder._offset_value
+        new_builder._distinct_value = source_builder._distinct_value
+        new_builder._with_relations = source_builder._with_relations.copy()
+        
+        # 重建查询
+        new_builder._query = select(self._model_class)
+        
+        return new_builder
     
     async def _load_relations(
         self, 
