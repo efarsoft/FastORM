@@ -1,0 +1,22 @@
+============================================================
+FastORM Performance Report
+============================================================
+Generated at: 2025-06-26T20:02:57.603598
+
+Monitoring Status:
+  Overall: Disabled
+  Profiling: Disabled
+  N+1 Detection: Disabled
+
+Query Statistics:
+  Total Queries: 0
+  Slow Queries: 0
+  Failed Queries: 0
+  Average Execution Time: 0.0s
+  Total Execution Time: 0.0s
+
+N+1 Query Alerts:
+  Total Alerts: 0
+  Critical Alerts: 0
+
+============================================================

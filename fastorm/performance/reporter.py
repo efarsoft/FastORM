@@ -5,14 +5,11 @@
 """
 
 import json
-from typing import Dict, List, Optional, Any
+from typing import Dict, Any
 from datetime import datetime
-from dataclasses import asdict
 import logging
 
-from .monitor import PerformanceMonitor, PerformanceStats
-from .profiler import QueryInfo, ProfileSession
-from .detector import N1QueryAlert, QueryPattern
+from .monitor import PerformanceMonitor
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +82,7 @@ class PerformanceReporter:
                 }
                 for query in failed_queries
             ],
-            "n1_alerts": [
+            "n1_alert_details": [
                 {
                     "description": alert.description,
                     "severity": alert.severity,
@@ -126,9 +123,12 @@ class PerformanceReporter:
         # 监控状态
         status = data['monitoring_status']
         lines.append("Monitoring Status:")
-        lines.append(f"  Overall: {'Enabled' if status['enabled'] else 'Disabled'}")
-        lines.append(f"  Profiling: {'Enabled' if status['profiling'] else 'Disabled'}")
-        lines.append(f"  N+1 Detection: {'Enabled' if status['n1_detection'] else 'Disabled'}")
+        enabled = 'Enabled' if status['enabled'] else 'Disabled'
+        lines.append(f"  Overall: {enabled}")
+        profiling = 'Enabled' if status['profiling'] else 'Disabled'
+        lines.append(f"  Profiling: {profiling}")
+        n1_detection = 'Enabled' if status['n1_detection'] else 'Disabled'
+        lines.append(f"  N+1 Detection: {n1_detection}")
         lines.append("")
         
         # 查询统计
@@ -152,7 +152,9 @@ class PerformanceReporter:
         if data['top_queries']:
             lines.append("Top Frequent Queries:")
             for i, query in enumerate(data['top_queries'], 1):
-                lines.append(f"  {i}. Table: {query['table']} (Count: {query['count']})")
+                table = query['table']
+                count = query['count']
+                lines.append(f"  {i}. Table: {table} (Count: {count})")
                 lines.append(f"     SQL: {query['sql_template']}")
             lines.append("")
         
@@ -177,9 +179,9 @@ class PerformanceReporter:
                 lines.append("")
             
             # N+1警告详情
-            if data.get('n1_alerts'):
+            if data.get('n1_alert_details'):
                 lines.append("N+1 Alert Details:")
-                for i, alert in enumerate(data['n1_alerts'], 1):
+                for i, alert in enumerate(data['n1_alert_details'], 1):
                     lines.append(f"  {i}. {alert['description']}")
                     lines.append(f"     Severity: {alert['severity']}")
                     lines.append(f"     Table: {alert['table']}")
