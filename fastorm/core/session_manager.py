@@ -1,88 +1,111 @@
 """
-FastORM 自动Session管理器
+FastORM Session 管理器
 
-实现自动session管理，让API真正简洁如ThinkORM。
+使用ContextVar实现线程安全的session管理。
 """
 
 from __future__ import annotations
 
-import contextlib
-from typing import Optional, AsyncGenerator, Any
-from contextvars import ContextVar
+import contextvars
+from contextlib import asynccontextmanager
+from typing import AsyncGenerator, Optional, Callable, Any, TYPE_CHECKING
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from fastorm.connection.database import Database
+if TYPE_CHECKING:
+    from fastorm.core.fastorm import FastORM
 
-
-# 当前会话的上下文变量
-_current_session: ContextVar[Optional[AsyncSession]] = ContextVar(
-    'current_session', default=None
+# 全局session上下文变量 - 线程安全
+_session_context: contextvars.ContextVar[Optional[AsyncSession]] = (
+    contextvars.ContextVar('session_context', default=None)
 )
 
 
 class SessionManager:
-    """自动Session管理器
+    """Session管理器
     
-    实现ThinkORM风格的简洁API，自动管理数据库会话。
+    提供简洁的session管理API，支持自动session和手动session。
     """
     
     @classmethod
-    def get_current_session(cls) -> Optional[AsyncSession]:
-        """获取当前上下文的会话"""
-        return _current_session.get()
-    
-    @classmethod
-    def set_current_session(cls, session: Optional[AsyncSession]) -> None:
-        """设置当前上下文的会话"""
-        _current_session.set(session)
-    
-    @classmethod
-    @contextlib.asynccontextmanager
-    async def auto_session(cls) -> AsyncGenerator[AsyncSession, None]:
-        """自动会话上下文管理器
+    def get_session(cls) -> Optional[AsyncSession]:
+        """获取当前上下文的session
         
-        如果已有会话则复用，否则创建新会话。
+        Returns:
+            当前session或None
         """
-        current = cls.get_current_session()
-        if current is not None:
-            # 复用现有会话
-            yield current
-        else:
-            # 创建新会话
-            async with Database.session() as new_session:
-                cls.set_current_session(new_session)
-                try:
-                    yield new_session
-                finally:
-                    cls.set_current_session(None)
+        return _session_context.get()
     
     @classmethod
-    async def execute_with_session(cls, func, *args, **kwargs) -> Any:
-        """在会话上下文中执行函数
+    def set_session(cls, session: AsyncSession) -> None:
+        """设置当前上下文的session
         
         Args:
-            func: 要执行的异步函数
-            *args: 位置参数
-            **kwargs: 关键字参数
-            
-        Returns:
-            函数执行结果
+            session: 数据库session
         """
-        current = cls.get_current_session()
-        if current is not None:
-            # 有现有会话，直接执行
-            return await func(current, *args, **kwargs)
+        _session_context.set(session)
+    
+    @classmethod
+    @asynccontextmanager
+    async def auto_session(cls) -> AsyncGenerator[AsyncSession, None]:
+        """自动session上下文管理器
+        
+        如果当前已有session则重用，否则创建新session。
+        
+        Yields:
+            数据库session
+        """
+        current_session = cls.get_session()
+        
+        if current_session is not None:
+            # 重用现有session
+            yield current_session
         else:
-            # 创建新会话并执行
-            async with cls.auto_session() as session:
-                return await func(session, *args, **kwargs)
+            # 创建新session
+            from fastorm.core.fastorm import FastORM
+            fastorm = FastORM.get_instance()
+            
+            async with fastorm.session_factory() as new_session:
+                cls.set_session(new_session)
+                try:
+                    yield new_session
+                    await new_session.commit()
+                except Exception:
+                    await new_session.rollback()
+                    raise
+                finally:
+                    cls.set_session(None)
 
 
-# 便捷函数别名
-auto_session = SessionManager.auto_session
-get_session = SessionManager.get_current_session
-execute_with_session = SessionManager.execute_with_session
+async def execute_with_session(
+    func: Callable[[AsyncSession], Any]
+) -> Any:
+    """在session上下文中执行函数
+    
+    自动管理session的创建、提交和回滚。
+    
+    Args:
+        func: 接受session参数的异步函数
+        
+    Returns:
+        函数执行结果
+        
+    Example:
+        async def create_user(session):
+            user = User(name='John')
+            session.add(user)
+            await session.flush()
+            return user
+        
+        user = await execute_with_session(create_user)
+    """
+    async with SessionManager.auto_session() as session:
+        return await func(session)
+
+
+# 向后兼容的别名
+get_session = SessionManager.get_session
+set_session = SessionManager.set_session
 
 
 # 装饰器：自动注入session参数

@@ -66,6 +66,9 @@ __all__ = [
     "__homepage__",
     "__repository__",
     
+    # 核心类
+    "FastORM",
+    
     # 核心模型
     "BaseModel",
     "Model",  # 增强版模型
@@ -169,12 +172,17 @@ __all__ = [
 def __getattr__(name: str) -> Any:
     """延迟导入模块和类"""
     
+    # 核心类
+    if name == "FastORM":
+        from fastorm.core.fastorm import FastORM
+        return FastORM
+    
     # 核心模型
-    if name == "BaseModel":
+    elif name == "BaseModel":
         from fastorm.model.base import BaseModel
         return BaseModel
     elif name == "Model":
-        from fastorm.model.enhanced import Model
+        from fastorm.model.model import Model
         return Model
     elif name == "DeclarativeBase":
         from fastorm.model.declarative import DeclarativeBase

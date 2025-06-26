@@ -44,7 +44,7 @@ classifiers = [
 ]
 requires-python = ">=3.10"
 
-# 核心依赖 - 严格版本控制确保兼容性
+# 🎯 简化依赖 - 一键安装包含所有常用功能
 dependencies = [
     # SQLAlchemy 2.0.40+ - 最新稳定版本，支持所有现代特性
     "sqlalchemy[asyncio]>=2.0.40,<2.1.0",
@@ -53,38 +53,25 @@ dependencies = [
     "pydantic>=2.11.0,<3.0.0",
     "pydantic-settings>=2.6.0,<3.0.0",
     
-    # 基础数据库支持 - 开箱即用
-    "aiosqlite>=0.20.0,<1.0.0",
+    # FastAPI支持 - 开箱即用
+    "fastapi>=0.115.12,<1.0.0",
+    "uvicorn[standard]>=0.34.0,<1.0.0",
     
-    # 异步支持
+    # 数据库驱动 - 全平台支持
+    "aiosqlite>=0.20.0,<1.0.0",       # SQLite (开发/测试)
+    "asyncpg>=0.29.0,<1.0.0",         # PostgreSQL (推荐生产)
+    "aiomysql>=0.2.0,<1.0.0",         # MySQL/MariaDB
+    
+    # 缓存支持
+    "redis[hiredis]>=5.2.0,<6.0.0",
+    "aiocache>=0.12.3,<1.0.0",
+    
+    # 基础工具
     "typing-extensions>=4.12.0",
     "annotated-types>=0.7.0",
 ]
 
 [project.optional-dependencies]
-# FastAPI集成
-fastapi = [
-    "fastapi>=0.115.12,<1.0.0",
-    "uvicorn[standard]>=0.34.0,<1.0.0",
-]
-
-# 数据库驱动
-postgresql = [
-    "asyncpg>=0.29.0,<1.0.0",
-    "psycopg[binary]>=3.2.0,<4.0.0",
-]
-mysql = [
-    "aiomysql>=0.2.0,<1.0.0",
-    "asyncmy>=0.2.9,<1.0.0",
-]
-# SQLite现在已包含在核心依赖中，无需额外安装
-
-# 缓存支持
-cache = [
-    "redis[hiredis]>=5.2.0,<6.0.0",
-    "aiocache>=0.12.3,<1.0.0",
-]
-
 # 开发工具
 dev = [
     "pytest>=8.3.0,<9.0.0",
@@ -108,11 +95,6 @@ docs = [
 profiling = [
     "py-spy>=0.3.14,<1.0.0",
     "memory-profiler>=0.61.0,<1.0.0",
-]
-
-# 完整安装包含所有功能
-full = [
-    "fastorm[fastapi,postgresql,mysql,cache]"
 ]
 
 [project.urls]

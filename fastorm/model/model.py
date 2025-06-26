@@ -1,38 +1,78 @@
 """
-FastORM 增强模型
+FastORM 模型
 
 实现真正简洁如ThinkORM的API。
 """
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Type, TypeVar, Union
+from typing import (
+    Any, Dict, List, Optional, Type, TypeVar, Union, TYPE_CHECKING
+)
 
-from sqlalchemy import select, delete, func
+from sqlalchemy import MetaData, select, delete, func, Integer
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import (
+    DeclarativeBase as SQLAlchemyDeclarativeBase, 
+    declared_attr,
+    Mapped,
+    mapped_column
+)
 
-from fastorm.model.base import BaseModel as OriginalBaseModel
 from fastorm.core.session_manager import execute_with_session
+from fastorm.mixins.events import EventMixin
+
+if TYPE_CHECKING:
+    from fastorm.query.builder import QueryBuilder
 
 T = TypeVar('T', bound='Model')
 
 
-class Model(OriginalBaseModel):
-    """增强的模型基类
+class DeclarativeBase(SQLAlchemyDeclarativeBase):
+    """SQLAlchemy 2.0 声明式基类
     
-    实现真正简洁的API，无需手动管理session。
+    使用最新的SQLAlchemy 2.0特性：
+    - 🔧 优化的元数据配置
+    - 🚀 编译缓存支持  
+    - 📊 查询计划缓存
+    """
+    
+    # SQLAlchemy 2.0.40+ 元数据优化
+    metadata = MetaData(
+        # 启用编译缓存以提升性能
+        info={
+            "compiled_cache": {},
+            "render_postcompile": True,
+        }
+    )
+
+
+class Model(DeclarativeBase, EventMixin):
+    """FastORM模型基类
+    
+    实现真正简洁的API，无需手动管理session，自动集成事件系统。
     
     示例:
     ```python
-    # 🎯 简洁如ThinkORM
+    # 🎯 简洁如ThinkORM + 事件支持
     user = await User.create(name='John', email='john@example.com')
     users = await User.where('age', '>', 18).limit(10).get()
     await user.update(name='Jane')
     await user.delete()
+    
+    # 事件处理器自动工作
+    class User(Model):
+        def on_before_insert(self):
+            print(f"准备创建用户: {self.name}")
     ```
     """
     
     __abstract__ = True
+    
+    # 通用主键字段（子类可以覆盖）
+    @declared_attr
+    def id(cls) -> Mapped[int]:
+        return mapped_column(Integer, primary_key=True, autoincrement=True)
     
     # =================================================================
     # 简洁的创建和查询方法
@@ -40,7 +80,7 @@ class Model(OriginalBaseModel):
     
     @classmethod
     async def create(cls: Type[T], **values: Any) -> T:
-        """创建新记录 - 无需session参数！
+        """创建新记录 - 无需session参数，自动触发事件！
         
         Args:
             **values: 字段值
@@ -52,7 +92,22 @@ class Model(OriginalBaseModel):
             user = await User.create(name='John', email='john@example.com')
         """
         async def _create(session: AsyncSession) -> T:
-            return await super(Model, cls).create(session, **values)
+            instance = cls(**values)
+            
+            # 触发 before_insert 事件
+            await instance.fire_event('before_insert')
+            
+            session.add(instance)
+            await session.flush()
+            await session.refresh(instance)
+            
+            # 触发 after_insert 事件  
+            await instance.fire_event('after_insert')
+            
+            # 在记录创建完成后保存其状态作为原始状态
+            instance._reset_original_state()
+            
+            return instance
         
         return await execute_with_session(_create)
     
@@ -70,7 +125,7 @@ class Model(OriginalBaseModel):
             user = await User.find(1)
         """
         async def _find(session: AsyncSession) -> Optional[T]:
-            return await super(Model, cls).find(session, id)
+            return await session.get(cls, id)
         
         return await execute_with_session(_find)
     
@@ -91,7 +146,10 @@ class Model(OriginalBaseModel):
             user = await User.find_or_fail(1)
         """
         async def _find_or_fail(session: AsyncSession) -> T:
-            return await super(Model, cls).find_or_fail(session, id)
+            instance = await session.get(cls, id)
+            if instance is None:
+                raise ValueError(f"{cls.__name__} with id {id} not found")
+            return instance
         
         return await execute_with_session(_find_or_fail)
     
@@ -106,7 +164,8 @@ class Model(OriginalBaseModel):
             users = await User.all()
         """
         async def _all(session: AsyncSession) -> List[T]:
-            return await super(Model, cls).all(session)
+            result = await session.execute(select(cls))
+            return list(result.scalars().all())
         
         return await execute_with_session(_all)
     
@@ -121,7 +180,9 @@ class Model(OriginalBaseModel):
             count = await User.count()
         """
         async def _count(session: AsyncSession) -> int:
-            result = await session.execute(select(func.count()).select_from(cls))
+            result = await session.execute(
+                select(func.count()).select_from(cls)
+            )
             return result.scalar() or 0
         
         return await execute_with_session(_count)
@@ -157,11 +218,17 @@ class Model(OriginalBaseModel):
             user = await User.last()
         """
         async def _last(session: AsyncSession) -> Optional[T]:
-            # 假设有id字段作为主键
-            result = await session.execute(
-                select(cls).order_by(cls.id.desc()).limit(1)
-            )
-            return result.scalars().first()
+            # 假设有id字段作为主键，尝试获取
+            try:
+                result = await session.execute(
+                    select(cls).order_by(cls.id.desc()).limit(1)  # type: ignore  # noqa: E501
+                )
+                return result.scalars().first()
+            except AttributeError:
+                # 如果没有id字段，获取最后插入的记录
+                result = await session.execute(select(cls))
+                records = list(result.scalars().all())
+                return records[-1] if records else None
         
         return await execute_with_session(_last)
     
@@ -170,7 +237,10 @@ class Model(OriginalBaseModel):
     # =================================================================
     
     @classmethod
-    async def create_many(cls: Type[T], records: List[Dict[str, Any]]) -> List[T]:
+    async def create_many(
+        cls: Type[T], 
+        records: List[Dict[str, Any]]
+    ) -> List[T]:
         """批量创建记录
         
         Args:
@@ -248,30 +318,58 @@ class Model(OriginalBaseModel):
     # =================================================================
     
     async def save(self) -> None:
-        """保存当前实例 - 无需session参数！
+        """保存当前实例 - 无需session参数，自动触发事件！
         
         Example:
             user.name = 'Jane'
             await user.save()
         """
         async def _save(session: AsyncSession) -> None:
-            await super(Model, self).save(session)
+            # 保存原始状态用于事件和脏检查
+            self._save_original_state()
+            
+            # 判断是新增还是更新
+            is_new = self.is_new_record()
+            
+            if is_new:
+                # 新增记录
+                await self.fire_event('before_insert')
+                session.add(self)
+                await session.flush()
+                await session.refresh(self)
+                await self.fire_event('after_insert')
+            else:
+                # 更新记录
+                await self.fire_event('before_update')
+                session.add(self)
+                await session.flush()
+                await self.fire_event('after_update')
+            
+            # 重置状态标志，为下次保存做准备
+            self._reset_original_state()
         
         await execute_with_session(_save)
     
     async def delete(self) -> None:
-        """删除当前实例 - 无需session参数！
+        """删除当前实例 - 无需session参数，自动触发事件！
         
         Example:
             await user.delete()
         """
         async def _delete(session: AsyncSession) -> None:
-            await super(Model, self).remove(session)
+            # 触发 before_delete 事件
+            await self.fire_event('before_delete')
+            
+            await session.delete(self)
+            await session.flush()
+            
+            # 触发 after_delete 事件
+            await self.fire_event('after_delete')
         
         await execute_with_session(_delete)
     
     async def update(self, **values: Any) -> None:
-        """更新当前实例 - 无需session参数！
+        """更新当前实例 - 无需session参数，自动触发事件！
         
         Args:
             **values: 要更新的字段值
@@ -279,9 +377,15 @@ class Model(OriginalBaseModel):
         Example:
             await user.update(name='Jane', email='jane@example.com')
         """
+        # 保存原始状态
+        self._save_original_state()
+        
+        # 更新字段值
         for key, value in values.items():
             if hasattr(self, key):
                 setattr(self, key, value)
+        
+        # 直接保存，由save()方法统一处理事件触发
         await self.save()
     
     async def refresh(self) -> None:
@@ -296,7 +400,7 @@ class Model(OriginalBaseModel):
         await execute_with_session(_refresh)
     
     # =================================================================
-    # 链式查询构建器 - 增强版
+    # 链式查询构建器
     # =================================================================
     
     @classmethod
@@ -305,7 +409,7 @@ class Model(OriginalBaseModel):
         column: str, 
         operator: Union[str, Any] = "=", 
         value: Any = None
-    ) -> 'EnhancedQueryBuilder[T]':
+    ) -> 'QueryBuilder[T]':
         """开始构建查询 - 支持操作符
         
         Args:
@@ -320,7 +424,7 @@ class Model(OriginalBaseModel):
             users = await User.where('age', '>', 18).get()
             users = await User.where('name', 'John').get()
         """
-        from fastorm.query.enhanced import EnhancedQueryBuilder
+        from fastorm.query.builder import QueryBuilder
         
         # 处理参数重载
         if value is None:
@@ -332,17 +436,44 @@ class Model(OriginalBaseModel):
             actual_operator = operator
             actual_value = value
         
-        return EnhancedQueryBuilder(cls).where(column, actual_operator, actual_value)
+        return QueryBuilder(cls).where(
+            column, actual_operator, actual_value
+        )
     
     @classmethod
-    def query(cls: Type[T]) -> 'EnhancedQueryBuilder[T]':
+    def query(cls: Type[T]) -> 'QueryBuilder[T]':
         """创建查询构建器
         
         Returns:
             查询构建器实例
             
         Example:
-            users = await User.query().where('age', '>', 18).order_by('name').get()
+            users = await User.query()\
+                              .where('age', '>', 18)\
+                              .order_by('name').get()
         """
-        from fastorm.query.enhanced import EnhancedQueryBuilder
-        return EnhancedQueryBuilder(cls) 
+        from fastorm.query.builder import QueryBuilder
+        return QueryBuilder(cls)
+    
+    def to_dict(self, exclude: Optional[List[str]] = None) -> Dict[str, Any]:
+        """转换为字典
+        
+        Args:
+            exclude: 要排除的字段列表
+            
+        Returns:
+            字典表示
+        """
+        exclude = exclude or []
+        result = {}
+        
+        if hasattr(self, '__table__'):
+            for column in self.__table__.columns:
+                if column.name not in exclude:
+                    value = getattr(self, column.name)
+                    # 处理日期时间类型
+                    if hasattr(value, 'isoformat'):
+                        value = value.isoformat()
+                    result[column.name] = value
+        
+        return result 
