@@ -1,21 +1,30 @@
 """
 FastORM 数据库连接管理
 
-提供数据库连接和会话管理功能，支持读写分离。
+提供数据库连接和会话管理功能，支持读写分离和多数据库适配。
 """
 
 from __future__ import annotations
 
-from typing import Any, Optional, AsyncGenerator, Dict, Union
+import asyncio
 import contextlib
 import logging
+import time
 from enum import Enum
+from typing import Any, Optional, AsyncGenerator, Dict, Union
 
 from sqlalchemy.ext.asyncio import (
     AsyncEngine, 
     AsyncSession, 
     create_async_engine,
     async_sessionmaker
+)
+
+from .adapters import (
+    DatabaseAdapterFactory, 
+    get_optimal_engine_config, 
+    validate_database_connection,
+    DatabaseAdapter
 )
 
 logger = logging.getLogger("fastorm.database")
@@ -105,13 +114,30 @@ class Database:
     @classmethod
     def _init_single_database(cls, database_url: str, **engine_kwargs: Any) -> None:
         """初始化单数据库连接"""
-        engine = create_async_engine(database_url, **engine_kwargs)
+        # 验证连接参数
+        validation_issues = validate_database_connection(database_url)
+        if validation_issues:
+            logger.warning(f"Database connection validation issues: {validation_issues}")
+        
+        # 获取最优配置
+        optimal_config = get_optimal_engine_config(database_url)
+        # 用户配置优先于最优配置
+        final_config = {**optimal_config, **engine_kwargs}
+        
+        # 使用适配器构建连接URL
+        adapter = DatabaseAdapterFactory.create_adapter(database_url)
+        final_url = adapter.build_connection_url()
+        
+        engine = create_async_engine(final_url, **final_config)
         cls._engines["default"] = engine
         cls._session_factories["default"] = async_sessionmaker(
             bind=engine,
             expire_on_commit=False
         )
-        logger.info("Database initialized in single mode")
+        
+        logger.info(
+            f"Database initialized in single mode with {adapter.dialect_name}"
+        )
     
     @classmethod 
     def _init_read_write_databases(
@@ -123,10 +149,20 @@ class Database:
         required_keys = ["write"]
         for key in required_keys:
             if key not in database_urls:
-                raise ValueError(f"Missing required database config key: {key}")
+                raise ValueError(
+                    f"Missing required database config key: {key}"
+                )
         
         # 创建写库连接
-        write_engine = create_async_engine(database_urls["write"], **engine_kwargs)
+        write_url = database_urls["write"]
+        write_adapter = DatabaseAdapterFactory.create_adapter(write_url)
+        write_config = get_optimal_engine_config(write_url)
+        write_final_config = {**write_config, **engine_kwargs}
+        write_final_url = write_adapter.build_connection_url()
+        
+        write_engine = create_async_engine(
+            write_final_url, **write_final_config
+        )
         cls._engines["write"] = write_engine
         cls._session_factories["write"] = async_sessionmaker(
             bind=write_engine,
@@ -135,7 +171,15 @@ class Database:
         
         # 创建读库连接（如果有的话）
         if "read" in database_urls:
-            read_engine = create_async_engine(database_urls["read"], **engine_kwargs)
+            read_url = database_urls["read"]
+            read_adapter = DatabaseAdapterFactory.create_adapter(read_url)
+            read_config = get_optimal_engine_config(read_url)
+            read_final_config = {**read_config, **engine_kwargs}
+            read_final_url = read_adapter.build_connection_url()
+            
+            read_engine = create_async_engine(
+                read_final_url, **read_final_config
+            )
             cls._engines["read"] = read_engine
             cls._session_factories["read"] = async_sessionmaker(
                 bind=read_engine,
@@ -146,7 +190,15 @@ class Database:
             cls._engines["read"] = write_engine
             cls._session_factories["read"] = cls._session_factories["write"]
         
-        logger.info(f"Database initialized in read-write split mode: {list(database_urls.keys())}")
+        db_types = [
+            write_adapter.dialect_name,
+            read_adapter.dialect_name if "read" in database_urls 
+            else write_adapter.dialect_name
+        ]
+        logger.info(
+            f"Database initialized in read-write split mode: "
+            f"{list(database_urls.keys())} ({'/'.join(set(db_types))})"
+        )
     
     @classmethod
     def _determine_connection_type(cls, operation_hint: Optional[str] = None) -> str:

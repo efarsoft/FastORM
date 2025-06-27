@@ -166,7 +166,7 @@ class Model(DeclarativeBase, EventMixin, PydanticIntegrationMixin, ScopeMixin):
     
     @classmethod
     async def all(cls: Type[T]) -> List[T]:
-        """获取所有记录 - 无需session参数！
+        """获取所有记录 - 无需session参数！使用读库
         
         Returns:
             所有记录列表
@@ -178,11 +178,11 @@ class Model(DeclarativeBase, EventMixin, PydanticIntegrationMixin, ScopeMixin):
             result = await session.execute(select(cls))
             return list(result.scalars().all())
         
-        return await execute_with_session(_all)
+        return await execute_with_session(_all, connection_type="read")
     
     @classmethod
     async def count(cls: Type[T]) -> int:
-        """统计记录数量 - 无需session参数！
+        """统计记录数量 - 无需session参数！使用读库
         
         Returns:
             记录数量
@@ -196,7 +196,7 @@ class Model(DeclarativeBase, EventMixin, PydanticIntegrationMixin, ScopeMixin):
             )
             return result.scalar() or 0
         
-        return await execute_with_session(_count)
+        return await execute_with_session(_count, connection_type="read")
     
     # =================================================================
     # 便捷的查询方法
@@ -204,7 +204,7 @@ class Model(DeclarativeBase, EventMixin, PydanticIntegrationMixin, ScopeMixin):
     
     @classmethod
     async def first(cls: Type[T]) -> Optional[T]:
-        """获取第一条记录
+        """获取第一条记录，使用读库
         
         Returns:
             第一条记录或None
@@ -216,11 +216,11 @@ class Model(DeclarativeBase, EventMixin, PydanticIntegrationMixin, ScopeMixin):
             result = await session.execute(select(cls).limit(1))
             return result.scalars().first()
         
-        return await execute_with_session(_first)
+        return await execute_with_session(_first, connection_type="read")
     
     @classmethod
     async def last(cls: Type[T]) -> Optional[T]:
-        """获取最后一条记录
+        """获取最后一条记录，使用读库
         
         Returns:
             最后一条记录或None
@@ -241,7 +241,7 @@ class Model(DeclarativeBase, EventMixin, PydanticIntegrationMixin, ScopeMixin):
                 records = list(result.scalars().all())
                 return records[-1] if records else None
         
-        return await execute_with_session(_last)
+        return await execute_with_session(_last, connection_type="read")
     
     # =================================================================
     # 便捷的批量操作
@@ -301,7 +301,7 @@ class Model(DeclarativeBase, EventMixin, PydanticIntegrationMixin, ScopeMixin):
     
     @classmethod
     async def count_where(cls: Type[T], column: str, value: Any) -> int:
-        """统计符合条件的记录数量
+        """统计符合条件的记录数量，使用读库
         
         Args:
             column: 列名
