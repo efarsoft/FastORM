@@ -68,13 +68,13 @@ class SessionManager:
             yield current_session
         else:
             # 创建新session，支持读写分离
-            from fastorm.connection.database import Database
+            from fastorm.connection.database import session as db_session
 
             # 根据提示确定连接类型
             if force_write:
                 connection_type = "write"
 
-            async with Database.session(
+            async with db_session(
                 connection_type=connection_type, force_write=force_write
             ) as new_session:
                 cls.set_session(new_session)

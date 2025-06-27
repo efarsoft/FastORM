@@ -17,7 +17,7 @@ from contextlib import asynccontextmanager
 from contextlib import contextmanager
 from dataclasses import dataclass
 from dataclasses import field
-from typing import Any
+from typing import Any, Callable, Optional, Union
 
 import psutil
 from sqlalchemy import insert
@@ -64,7 +64,7 @@ class BatchConfig:
 
     # 监控配置
     enable_monitoring: bool = True
-    progress_callback: callable | None = None
+    progress_callback: Optional[Callable] = None
 
     # 优化配置
     disable_autoflush: bool = True

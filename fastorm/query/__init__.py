@@ -17,7 +17,7 @@ from .batch import BatchUpdate
 from .batch import BatchUpsert
 from .batch import BatchValidationError
 from .builder import QueryBuilder
-from .cache import QueryCache
+from .cache import QueryCacheSupport
 from .pagination import Paginator
 from .soft_delete import SoftDeleteQueryBuilder
 
@@ -27,7 +27,7 @@ __all__ = [
     # 分页
     "Paginator",
     # 缓存
-    "QueryCache",
+    "QueryCacheSupport",
     # 软删除
     "SoftDeleteQueryBuilder",
     # 批量操作

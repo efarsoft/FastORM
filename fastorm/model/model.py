@@ -6,9 +6,10 @@ FastORM 模型
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, TypeVar
+from datetime import datetime, timezone
+from typing import TYPE_CHECKING, Any, ClassVar, TypeVar
 
-from sqlalchemy import Integer
+from sqlalchemy import Integer, DateTime
 from sqlalchemy import MetaData
 from sqlalchemy import delete
 from sqlalchemy import func
@@ -54,28 +55,189 @@ class Model(DeclarativeBase, EventMixin, PydanticIntegrationMixin, ScopeMixin):
     """FastORM模型基类
 
     实现真正简洁的API，无需手动管理session，自动集成事件系统和Pydantic V2验证。
+    内置时间戳管理功能，支持全局配置和自定义。
 
     示例:
     ```python
-    # 🎯 简洁如ThinkORM + 事件支持 + Pydantic验证
+    # 🎯 简洁如ThinkORM + 事件支持 + Pydantic验证 + 自动时间戳
     user = await User.create(name='John', email='john@example.com')
     users = await User.where('age', '>', 18).limit(10).get()
-    await user.update(name='Jane')
+    await user.update(name='Jane')  # 自动更新 updated_at
     await user.delete()
 
-    # Pydantic验证和序列化
-    user_dict = user.to_dict()
-    user_json = user.to_json()
-    schema = User.get_pydantic_schema()
-
-    # 事件处理器自动工作
+    # 时间戳配置
     class User(Model):
-        def on_before_insert(self):
-            print(f"准备创建用户: {self.name}")
+        timestamps = True  # 启用时间戳（默认False）
+        created_at_column = "created_time"  # 自定义字段名
+        updated_at_column = "updated_time"  # 自定义字段名
+
+    # 全局关闭时间戳
+    Model.set_global_timestamps(False)
     ```
     """
 
     __abstract__ = True
+
+    # =================================================================
+    # 时间戳配置 - 内置到Model基类中
+    # =================================================================
+
+    # 全局时间戳开关（由配置系统控制）
+    @classmethod
+    def _get_global_timestamps_enabled(cls) -> bool:
+        """获取全局时间戳配置状态"""
+        try:
+            from fastorm.config import get_setting
+            return get_setting('timestamps_enabled', True)
+        except ImportError:
+            # 如果配置系统不可用，使用默认值
+            return True
+
+    # 模型级配置（默认启用，简化配置）
+    timestamps: ClassVar[bool] = True
+
+    # 时间戳字段名配置（可在子类中自定义）
+    created_at_column: ClassVar[str] = "created_at"
+    updated_at_column: ClassVar[str] = "updated_at"
+
+    @classmethod
+    def set_global_timestamps(cls, enabled: bool) -> None:
+        """全局设置时间戳功能
+        
+        Args:
+            enabled: 是否启用时间戳功能
+            
+        Example:
+            # 全局关闭时间戳
+            Model.set_global_timestamps(False)
+            
+            # 全局启用时间戳
+            Model.set_global_timestamps(True)
+        """
+        try:
+            from fastorm.config import set_setting
+            set_setting('timestamps_enabled', enabled)
+        except ImportError:
+            # 如果配置系统不可用，暂时存储在类属性中
+            cls._fallback_timestamps_enabled = enabled
+
+    @classmethod
+    def is_timestamps_enabled(cls) -> bool:
+        """检查当前模型是否启用时间戳
+        
+        Returns:
+            如果全局启用且模型启用则返回True
+        """
+        global_enabled = cls._get_global_timestamps_enabled()
+        return global_enabled and cls.timestamps
+
+    @declared_attr
+    def created_at(cls):
+        """创建时间字段 - 自动添加到启用时间戳的模型中"""
+        # 检查是否需要时间戳字段
+        global_enabled = cls._get_global_timestamps_enabled()
+        if (global_enabled and 
+            hasattr(cls, 'timestamps') and 
+            cls.timestamps):
+            return mapped_column(
+                DateTime(timezone=True),
+                default=lambda: datetime.now(timezone.utc),
+                nullable=True,
+                name=cls.created_at_column,
+                comment="创建时间",
+            )
+        return None
+
+    @declared_attr  
+    def updated_at(cls):
+        """更新时间字段 - 自动添加到启用时间戳的模型中"""
+        # 检查是否需要时间戳字段
+        global_enabled = cls._get_global_timestamps_enabled()
+        if (global_enabled and 
+            hasattr(cls, 'timestamps') and 
+            cls.timestamps):
+            return mapped_column(
+                DateTime(timezone=True),
+                default=lambda: datetime.now(timezone.utc),
+                onupdate=lambda: datetime.now(timezone.utc),
+                nullable=True,
+                name=cls.updated_at_column,
+                comment="更新时间",
+            )
+        return None
+
+    def touch(self) -> None:
+        """手动更新时间戳
+        
+        更新 updated_at 为当前时间，不触发其他字段更新。
+        
+        Example:
+            await user.touch()
+            await user.save()
+        """
+        if self.is_timestamps_enabled():
+            setattr(self, self.updated_at_column, datetime.now(timezone.utc))
+
+    def get_created_at(self) -> datetime | None:
+        """获取创建时间
+        
+        Returns:
+            创建时间，如果未设置或未启用时间戳则返回None
+        """
+        if not self.is_timestamps_enabled():
+            return None
+        return getattr(self, self.created_at_column, None)
+
+    def get_updated_at(self) -> datetime | None:
+        """获取更新时间
+        
+        Returns:
+            更新时间，如果未设置或未启用时间戳则返回None
+        """
+        if not self.is_timestamps_enabled():
+            return None
+        return getattr(self, self.updated_at_column, None)
+
+    def set_created_at(self, value: datetime | None) -> None:
+        """设置创建时间
+        
+        Args:
+            value: 创建时间
+        """
+        if self.is_timestamps_enabled():
+            setattr(self, self.created_at_column, value)
+
+    def set_updated_at(self, value: datetime | None) -> None:
+        """设置更新时间
+        
+        Args:
+            value: 更新时间
+        """
+        if self.is_timestamps_enabled():
+            setattr(self, self.updated_at_column, value)
+
+    def _before_create_timestamp(self) -> None:
+        """创建前的时间戳处理 - 内部方法"""
+        if not self.is_timestamps_enabled():
+            return
+
+        now = datetime.now(timezone.utc)
+
+        # 设置创建时间（如果未设置）
+        if not self.get_created_at():
+            self.set_created_at(now)
+
+        # 设置更新时间（如果未设置）
+        if not self.get_updated_at():
+            self.set_updated_at(now)
+
+    def _before_update_timestamp(self) -> None:
+        """更新前的时间戳处理 - 内部方法"""
+        if not self.is_timestamps_enabled():
+            return
+
+        # 自动更新 updated_at
+        self.set_updated_at(datetime.now(timezone.utc))
 
     # 通用主键字段（子类可以覆盖）
     @declared_attr
@@ -102,6 +264,9 @@ class Model(DeclarativeBase, EventMixin, PydanticIntegrationMixin, ScopeMixin):
 
         async def _create(session: AsyncSession) -> T:
             instance = cls(**values)
+
+            # 处理时间戳（在事件之前）
+            instance._before_create_timestamp()
 
             # 触发 before_insert 事件
             await instance.fire_event("before_insert")
@@ -346,14 +511,16 @@ class Model(DeclarativeBase, EventMixin, PydanticIntegrationMixin, ScopeMixin):
             is_new = self.is_new_record()
 
             if is_new:
-                # 新增记录
+                # 新增记录 - 处理时间戳
+                self._before_create_timestamp()
                 await self.fire_event("before_insert")
                 session.add(self)
                 await session.flush()
                 await session.refresh(self)
                 await self.fire_event("after_insert")
             else:
-                # 更新记录
+                # 更新记录 - 处理时间戳
+                self._before_update_timestamp()
                 await self.fire_event("before_update")
                 session.add(self)
                 await session.flush()
@@ -384,7 +551,7 @@ class Model(DeclarativeBase, EventMixin, PydanticIntegrationMixin, ScopeMixin):
         await execute_with_session(_delete)
 
     async def update(self, **values: Any) -> None:
-        """更新当前实例 - 无需session参数，自动触发事件！
+        """更新当前实例 - 无需session参数，自动触发事件！自动更新时间戳
 
         Args:
             **values: 要更新的字段值
@@ -400,7 +567,7 @@ class Model(DeclarativeBase, EventMixin, PydanticIntegrationMixin, ScopeMixin):
             if hasattr(self, key):
                 setattr(self, key, value)
 
-        # 直接保存，由save()方法统一处理事件触发
+        # 直接保存，由save()方法统一处理事件触发和时间戳
         await self.save()
 
     async def refresh(self) -> None:

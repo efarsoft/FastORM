@@ -358,17 +358,8 @@ class SQLiteAdapter(DatabaseAdapter):
             query_cache_size=1200,
             compiled_cache_size=1000,
             extra_engine_options={
-                # SQLite特定优化
-                "timeout": 20,
+                # aiosqlite特定配置
                 "check_same_thread": False,
-                # SQLite性能优化参数
-                "pragmas": {
-                    "journal_mode": "WAL",
-                    "cache_size": -1 * 64000,  # 64MB
-                    "foreign_keys": 1,
-                    "ignore_check_constraints": 0,
-                    "synchronous": 0,
-                },
             },
         )
 
@@ -471,19 +462,29 @@ def get_optimal_engine_config(database_url: str | URL) -> dict[str, Any]:
 
     # 构建引擎配置
     engine_config = {
-        "pool_size": config.pool_size,
-        "max_overflow": config.max_overflow,
-        "pool_timeout": config.pool_timeout,
-        "pool_recycle": config.pool_recycle,
-        "pool_pre_ping": config.pool_pre_ping,
         "echo": config.echo,
-        # SQLAlchemy 2.0 新特性
-        "query_cache_size": config.query_cache_size,
-        "compiled_cache_size": config.compiled_cache_size,
     }
+    
+    # 只有非SQLite数据库才添加这些配置
+    if adapter.dialect_name != "sqlite":
+        engine_config.update({
+            # SQLAlchemy 2.0 新特性
+            "query_cache_size": config.query_cache_size,
+            "compiled_cache_size": config.compiled_cache_size,
+            # 池配置
+            "pool_size": config.pool_size,
+            "max_overflow": config.max_overflow,
+            "pool_timeout": config.pool_timeout,
+            "pool_recycle": config.pool_recycle,
+            "pool_pre_ping": config.pool_pre_ping,
+        })
 
-    # 添加数据库特定配置
-    engine_config.update(config.extra_engine_options)
+    # 添加数据库特定配置（对SQLite也有效）
+    if adapter.dialect_name == "sqlite":
+        # SQLite只使用connect_args传递参数
+        engine_config["connect_args"] = config.extra_engine_options
+    else:
+        engine_config.update(config.extra_engine_options)
 
     return engine_config
 

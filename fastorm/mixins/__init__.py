@@ -10,6 +10,7 @@ from .scopes import create_scoped_query
 from .scopes import global_scope
 from .scopes import scope
 from .soft_delete import SoftDeleteMixin
+from .timestamps import TimestampMixin
 
 __all__ = [
     "EventMixin",
@@ -17,6 +18,7 @@ __all__ = [
     "SoftDeleteMixin",
     "PydanticIntegrationMixin",
     "ScopeMixin",
+    "TimestampMixin",
     "scope",
     "global_scope",
     "create_scoped_query",

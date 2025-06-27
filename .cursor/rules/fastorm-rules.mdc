@@ -1,0 +1,23 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+1.总是使用中文进行回复
+
+2.严格遵循pydantic V2 及sqlalchemy 2.0的规范，充分使用pydantic V2 、sqlalchemy 2.0的特性，实现高性能、高可用、高扩展的ORM框架，
+  基准版本： pydantic 2.11.5 、sqlalchemy 2.0.41、fastapi 0.115.12 
+
+3. 在不确定所有技术最新规范的情况下，使用 use context7 工具进行查询，如 “对话内容 use context7”
+   
+4.严禁使用别名，需要使用正确的名称引入
+
+5.遵循DRY原则，保障代码的精简性及高质量。
+
+6.针对项目有任何不理解的地方，立即向我发出询问，而不是主观的推断
+
+1. 我当前使用的是操作系统是： Windows  环境
+   -- PSReadLine: 2.0.0
+   -- PowerShell: 5.1.26100.4202
+
+   -- 操作系统: Microsoft Windows 10.0.26100
