@@ -87,7 +87,7 @@ class Model(DeclarativeBase, EventMixin, PydanticIntegrationMixin, ScopeMixin):
     
     @classmethod
     async def create(cls: Type[T], **values: Any) -> T:
-        """创建新记录 - 无需session参数，自动触发事件！
+        """创建新记录 - 无需session参数，自动触发事件！自动使用写库
         
         Args:
             **values: 字段值
@@ -116,25 +116,29 @@ class Model(DeclarativeBase, EventMixin, PydanticIntegrationMixin, ScopeMixin):
             
             return instance
         
-        return await execute_with_session(_create)
+        # 创建操作使用写库
+        return await execute_with_session(_create, connection_type="write")
     
     @classmethod
-    async def find(cls: Type[T], id: Any) -> Optional[T]:
-        """通过主键查找记录 - 无需session参数！
+    async def find(cls: Type[T], id: Any, *, force_write: bool = False) -> Optional[T]:
+        """通过主键查找记录 - 无需session参数！自动使用读库
         
         Args:
             id: 主键值
+            force_write: 强制使用写库（用于读自己的写等场景）
             
         Returns:
             模型实例或None
             
         Example:
-            user = await User.find(1)
+            user = await User.find(1)  # 使用读库
+            user = await User.find(1, force_write=True)  # 强制使用写库
         """
         async def _find(session: AsyncSession) -> Optional[T]:
             return await session.get(cls, id)
         
-        return await execute_with_session(_find)
+        connection_type = "write" if force_write else "read"
+        return await execute_with_session(_find, connection_type=connection_type)
     
     @classmethod
     async def find_or_fail(cls: Type[T], id: Any) -> T:

@@ -267,17 +267,32 @@ await User.bulk_create([
 # 查询缓存
 users = await User.query().cache(ttl=3600).get()
 
-# 读写分离
-from fastorm import ReadWriteRepository
+# 智能读写分离（默认关闭，需显式启用）
+from fastorm.connection import Database, ReadWriteConfig
 
-class UserRepository(ReadWriteRepository):
-    model = User
+# 注意：读写分离功能默认关闭，确保向后兼容性
+# 需要显式配置来启用此功能
+config = ReadWriteConfig(
+    enable_read_write_split=True,  # 显式启用读写分离
+    read_preference="prefer_secondary",
+    write_concern="primary_only"
+)
 
-user_repo = UserRepository()
-# 读操作自动路由到从库
-users = await user_repo.get_many({"status": "active"})
+# 初始化读写分离数据库
+await Database.init({
+    "write": "postgresql+asyncpg://user:pass@master.db/mydb",
+    "read": "postgresql+asyncpg://user:pass@slave.db/mydb"
+}, read_write_config=config)
+
 # 写操作自动路由到主库
-user = await user_repo.create({"name": "新用户"})
+async with Database.write_session() as session:
+    user = User(name="新用户")
+    session.add(user)
+    await session.commit()
+
+# 读操作自动路由到从库
+async with Database.read_session() as session:
+    users = await session.execute(select(User).where(User.status == "active"))
 ```
 
 ### 🛡️ 类型安全
