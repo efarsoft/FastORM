@@ -25,6 +25,15 @@ from .reporter import (
     PerformanceReporter, generate_report,
     print_performance_summary, save_report
 )
+from .metrics import (
+    MetricsCollector, global_metrics_collector,
+    start_metrics_collection, stop_metrics_collection,
+    get_current_metrics, get_health_report,
+    record_connection_pool_metrics, record_cache_performance
+)
+from .dashboard import (
+    PerformanceDashboard, start_interactive_dashboard, start_realtime_dashboard
+)
 
 __all__ = [
     # 核心类
@@ -32,6 +41,8 @@ __all__ = [
     'PerformanceMonitor', 
     'N1Detector',
     'PerformanceReporter',
+    'MetricsCollector',
+    'PerformanceDashboard',
     
     # 便捷函数
     'profile_query',
@@ -49,8 +60,21 @@ __all__ = [
     'print_performance_summary',
     'save_report',
     
+    # 指标收集功能
+    'start_metrics_collection',
+    'stop_metrics_collection',
+    'get_current_metrics',
+    'get_health_report',
+    'record_connection_pool_metrics',
+    'record_cache_performance',
+    
+    # 仪表板功能
+    'start_interactive_dashboard',
+    'start_realtime_dashboard',
+    
     # 全局实例
     'GlobalMonitor',
+    'global_metrics_collector',
 ]
 
 # 版本信息

@@ -174,6 +174,33 @@ __all__ = [
     'QueryProfiler', 'PerformanceMonitor', 'N1Detector', 'PerformanceReporter',
     'profile_query', 'start_monitoring', 'stop_monitoring', 
     'get_performance_stats', 'print_performance_summary',
+    
+    # 验证系统增强 (Stage 14)
+    'ValidationEngine', 'ValidationContext', 'ValidationConfig',
+    'FieldValidatorRegistry', 'ModelValidatorRegistry', 
+    'ValidationRuleRegistry',
+    'validate_field', 'validate_model', 'async_validator',
+    'ValidationError', 'FieldValidationError', 'ModelValidationError',
+    
+    # 序列化系统增强 (Stage 14)
+    'SerializationEngine', 'SerializationContext', 'SerializationConfig',
+    'BaseSerializer', 'ModelSerializer', 'FieldSerializer', 
+    'RelationSerializer',
+    'SerializerRegistry', 'SerializerChain',
+    'SerializationField', 'FieldConfig', 'FieldMapping', 
+    'FieldTransformer',
+    'JSONFormatter', 'XMLFormatter', 'CSVFormatter', 'FormatterRegistry',
+    'serialize_field', 'serialize_model', 'serialize_relation', 
+    'custom_serializer',
+    'format_as_json', 'format_as_xml', 'format_as_csv',
+    'SerializationError', 'FieldSerializationError', 
+    'RelationSerializationError',
+    
+    # 批量操作增强 (Stage 14) - 现在在 query.batch 模块中
+    'BatchEngine', 'BatchContext', 'BatchConfig',
+    'BatchInsert', 'BatchUpdate', 'BatchDelete', 'BatchUpsert',
+    'BatchOperation',
+    'BatchError', 'BatchValidationError', 'BatchTransactionError',
 ]
 
 # =============================================================================
@@ -314,8 +341,8 @@ def __getattr__(name: str) -> Any:
         return event_listener
     
     elif name == "BatchOperations":
-        from fastorm.operations.batch import BatchOperations
-        return BatchOperations
+        from fastorm.query.batch import BatchEngine
+        return BatchEngine
     
     elif name == "MigrationManager":
         from fastorm.migrations.manager import MigrationManager
@@ -396,6 +423,86 @@ def __getattr__(name: str) -> Any:
             print_performance_summary
         )
         return locals()[name] if name != "get_performance_stats" else get_performance_stats
+    
+    # 验证系统增强 (Stage 14)
+    elif name in ["ValidationEngine", "ValidationContext", "ValidationConfig"]:
+        from fastorm.validation.engine import (
+            ValidationEngine, ValidationContext, ValidationConfig
+        )
+        return locals()[name]
+    elif name in ["FieldValidatorRegistry", "ModelValidatorRegistry"]:
+        from fastorm.validation.field_validators import FieldValidatorRegistry
+        from fastorm.validation.model_validators import ModelValidatorRegistry
+        return locals()[name]
+    elif name == "ValidationRuleRegistry":
+        from fastorm.validation.rules import ValidationRuleRegistry
+        return ValidationRuleRegistry
+    elif name in ["validate_field", "validate_model", "async_validator"]:
+        from fastorm.validation.decorators import (
+            validate_field, validate_model, async_validator
+        )
+        return locals()[name]
+    elif name in ["ValidationError", "FieldValidationError", "ModelValidationError"]:
+        from fastorm.validation.exceptions import (
+            ValidationError, FieldValidationError, ModelValidationError
+        )
+        return locals()[name]
+    
+    # 序列化系统增强 (Stage 14)
+    elif name in ["SerializationEngine", "SerializationContext", "SerializationConfig"]:
+        from fastorm.serialization.engine import (
+            SerializationEngine, SerializationContext, SerializationConfig
+        )
+        return locals()[name]
+    elif name in ["BaseSerializer", "ModelSerializer", "FieldSerializer", "RelationSerializer"]:
+        from fastorm.serialization.serializers import (
+            BaseSerializer, ModelSerializer, FieldSerializer, RelationSerializer
+        )
+        return locals()[name]
+    elif name in ["SerializerRegistry", "SerializerChain"]:
+        from fastorm.serialization.serializers import (
+            SerializerRegistry, SerializerChain
+        )
+        return locals()[name]
+    elif name in ["SerializationField", "FieldConfig", "FieldMapping", "FieldTransformer"]:
+        from fastorm.serialization.fields import (
+            SerializationField, FieldConfig, FieldMapping, FieldTransformer
+        )
+        return locals()[name]
+    elif name in ["JSONFormatter", "XMLFormatter", "CSVFormatter", "FormatterRegistry"]:
+        from fastorm.serialization.formatters import (
+            JSONFormatter, XMLFormatter, CSVFormatter, FormatterRegistry
+        )
+        return locals()[name]
+    elif name in ["serialize_field", "serialize_model", "serialize_relation", "custom_serializer"]:
+        from fastorm.serialization.decorators import (
+            serialize_field, serialize_model, serialize_relation, custom_serializer
+        )
+        return locals()[name]
+    elif name in ["format_as_json", "format_as_xml", "format_as_csv"]:
+        from fastorm.serialization.formatters import (
+            format_as_json, format_as_xml, format_as_csv
+        )
+        return locals()[name]
+    elif name in ["SerializationError", "FieldSerializationError", "RelationSerializationError"]:
+        from fastorm.serialization.exceptions import (
+            SerializationError, FieldSerializationError, RelationSerializationError
+        )
+        return locals()[name]
+    
+    # 批量操作增强 (Stage 14) - 现在在 query.batch 模块中
+    elif name in ["BatchEngine", "BatchContext", "BatchConfig"]:
+        from fastorm.query.batch import BatchEngine, BatchContext, BatchConfig
+        return locals()[name]
+    elif name in ["BatchInsert", "BatchUpdate", "BatchDelete", "BatchUpsert"]:
+        from fastorm.query.batch import BatchInsert, BatchUpdate, BatchDelete, BatchUpsert
+        return locals()[name]
+    elif name in ["BatchOperation"]:
+        from fastorm.query.batch import BatchOperation
+        return BatchOperation
+    elif name in ["BatchError", "BatchValidationError", "BatchTransactionError"]:
+        from fastorm.query.batch import BatchError, BatchValidationError, BatchTransactionError
+        return locals()[name]
     
     raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
 

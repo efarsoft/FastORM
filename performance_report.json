@@ -1,0 +1,23 @@
+{
+  "timestamp": "2025-06-27T14:13:06.392102",
+  "monitoring_status": {
+    "enabled": true,
+    "profiling": true,
+    "n1_detection": true
+  },
+  "query_statistics": {
+    "total_queries": 0,
+    "slow_queries": 0,
+    "failed_queries": 0,
+    "avg_execution_time": 0.0,
+    "total_execution_time": 0.0
+  },
+  "n1_alerts": {
+    "total_alerts": 0,
+    "critical_alerts": 0
+  },
+  "top_queries": [],
+  "slow_queries": [],
+  "failed_queries": [],
+  "n1_alert_details": []
+}
