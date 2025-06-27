@@ -69,6 +69,10 @@ dependencies = [
     # 基础工具
     "typing-extensions>=4.12.0",
     "annotated-types>=0.7.0",
+    
+    # CLI支持
+    "click>=8.1.0,<9.0.0",
+    "rich>=13.0.0,<14.0.0",
 ]
 
 [project.optional-dependencies]
