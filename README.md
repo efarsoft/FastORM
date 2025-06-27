@@ -2,9 +2,11 @@
 
 <div align="center">
 
-![FastORM Logo](https://img.shields.io/badge/FastORM-v1.0.0-blue?style=for-the-badge&logo=python)
+![FastORM Logo](https://img.shields.io/badge/FastORM-v0.1.0-blue?style=for-the-badge&logo=python)
 
 **🚀 专为FastAPI优化的现代异步ORM框架**
+
+*第十四阶段核心功能补全 - 验证系统增强 · 序列化系统增强 · 批量操作增强*
 
 [![PyPI version](https://img.shields.io/pypi/v/fastorm?style=flat-square)](https://pypi.org/project/fastorm/)
 [![Python versions](https://img.shields.io/pypi/pyversions/fastorm?style=flat-square)](https://pypi.org/project/fastorm/)
@@ -39,23 +41,32 @@ FastORM不仅是一个优秀的ORM框架，更是一个**以开发者为中心�
 user = await User.create(name="张三", email="zhang@example.com")
 users = await User.where("age", ">", 18).order_by("created_at").limit(10).get()
 
-# 🔥 类型安全的查询构建
+# 🔥 类型安全的查询构建与验证增强
 class UserSchema(BaseModel):
-    name: str
+    name: str = Field(..., min_length=2, max_length=50)
     email: EmailStr
-    age: int
+    age: int = Field(..., ge=0, le=150)
+    
+    @field_validator('name')
+    @classmethod
+    def validate_name(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError('用户名不能为空')
+        return v.strip()
 
-users = await User.query().filter_by_schema(UserSchema).all()
+# 验证系统增强 - 自动验证和错误处理
+users = await User.query().filter_by_schema(UserSchema).validate_all()
 
 # ⚡ FastAPI原生集成，零配置
 @app.get("/users")
 async def get_users(user_repo: UserRepository = Depends()):
     return await user_repo.paginate(page=1, size=20)
 
-# 🛠️ 强大的CLI工具
+# 🛠️ 强大的CLI工具 + 🚀 OIDC发布
 $ fastorm init my-project --template api --database postgresql
 $ fastorm create:model User -f "name:str:required" -f "email:str:unique"
 $ fastorm setup  # 现有项目一键集成
+$ fastorm publish --pypi-oidc  # OIDC安全发布
 ```
 
 ## 🏆 核心优势
@@ -68,7 +79,10 @@ $ fastorm setup  # 现有项目一键集成
 | **性能监控** | 🟢 内置 | 🔴 无 | 🔴 无 | 🔴 无 |
 | **CLI工具** | 🟢 完整 | 🟡 基础 | 🟡 基础 | 🔴 无 |
 | **现有项目集成** | 🟢 自动 | 🔴 手动 | 🔴 手动 | 🔴 手动 |
-| **生态成熟度** | 🟡 新兴 | 🟢 成熟 | 🟡 中等 | 🟡 发展中 |
+| **验证系统** | 🟢 增强 | 🟡 基础 | 🟡 基础 | 🟢 完整 |
+| **序列化系统** | 🟢 增强 | 🔴 无 | 🔴 无 | 🟢 完整 |
+| **批量操作** | 🟢 增强 | 🟡 基础 | 🟡 基础 | 🟡 基础 |
+| **生态成熟度** | 🟡 快速发展 | 🟢 成熟 | 🟡 中等 | 🟡 发展中 |
 
 ## 🚀 快速开始
 
@@ -88,6 +102,10 @@ pip install fastorm
 - ✅ **CLI工具** - 强大的命令行工具
 - ✅ **性能监控** - 内置查询分析
 - ✅ **测试工厂** - 完整测试支持
+- ✅ **验证系统增强** - Pydantic 2.11高级验证器和错误处理
+- ✅ **序列化系统增强** - 多格式输出与自定义序列化引擎
+- ✅ **批量操作增强** - 高性能批量处理引擎和优化
+- ✅ **OIDC发布** - 安全的PyPI自动发布流程
 
 ### 全新项目 - 2分钟上手
 
@@ -356,6 +374,91 @@ class TestUserAPI(DatabaseTestCase):
         assert len(users) == 5
 ```
 
+### 🔥 第十四阶段：核心功能补全
+
+#### 🛡️ 验证系统增强
+```python
+from fastorm.validation import ValidationEngine, field_validator_v2, async_validator
+
+class UserSchema(BaseModel):
+    name: str = Field(..., min_length=2, max_length=50)
+    email: EmailStr
+    age: int = Field(..., ge=0, le=150)
+    phone: Optional[str] = Field(None, regex=r'^1[3-9]\d{9}$')
+    
+    @field_validator_v2('name', mode='before')
+    @classmethod
+    def normalize_name(cls, v: str) -> str:
+        return v.strip().title() if v else v
+    
+    @async_validator('email')
+    @classmethod
+    async def validate_unique_email(cls, v: str) -> str:
+        if await User.query().filter(User.email == v).exists():
+            raise ValueError('邮箱已被注册')
+        return v
+
+# 验证引擎自动处理
+validation_engine = ValidationEngine()
+validated_data = await validation_engine.validate_async(UserSchema, user_data)
+```
+
+#### 🎨 序列化系统增强
+```python
+from fastorm.serialization import SerializationEngine, custom_serializer, format_as_json
+
+class UserSerializer(BaseSerializer):
+    model = User
+    
+    @custom_serializer('created_at')
+    def serialize_datetime(self, value: datetime) -> str:
+        return value.strftime('%Y-%m-%d %H:%M:%S')
+    
+    @custom_serializer('profile')
+    async def serialize_profile(self, user: User) -> dict:
+        profile = await user.profile.load()
+        return {'bio': profile.bio, 'avatar': profile.avatar_url}
+
+# 多格式序列化
+user = await User.find(1)
+json_data = await format_as_json(user, include=['name', 'email', 'profile'])
+xml_data = await format_as_xml(user)
+csv_data = await format_as_csv([user1, user2, user3])
+
+# 批量序列化优化
+users = await User.query().limit(1000).get()
+serialized = await SerializationEngine.serialize_batch(users, UserSerializer)
+```
+
+#### ⚡ 批量操作增强
+```python
+from fastorm.query.batch import BatchEngine, BatchContext, bulk_upsert
+
+# 高性能批量创建
+batch_data = [
+    {'name': f'用户{i}', 'email': f'user{i}@example.com'}
+    for i in range(10000)
+]
+
+batch_engine = BatchEngine()
+async with BatchContext(batch_size=1000) as ctx:
+    result = await batch_engine.bulk_create(User, batch_data, context=ctx)
+    print(f"成功创建 {result.created_count} 个用户")
+
+# 智能批量更新
+await bulk_upsert(
+    User,
+    data=batch_data,
+    update_fields=['name'],
+    conflict_fields=['email']
+)
+
+# 批量删除优化
+deleted_count = await User.query().filter(
+    User.last_login < datetime.now() - timedelta(days=365)
+).bulk_delete(batch_size=500)
+```
+
 ## 📊 性能基准
 
 ```
@@ -567,6 +670,37 @@ except IntegrityError as e:
 
 ## 🔥 最新功能
 
+### 🎯 第十四阶段：核心功能补全 (当前版本)
+```bash
+# 验证系统增强 - Pydantic 2.11完整支持
+from fastorm.validation import ValidationEngine, ValidationContext
+
+# 高级验证器
+@field_validator_v2('email', mode='after')
+@classmethod  
+async def validate_business_email(cls, v: str) -> str:
+    if not v.endswith(('.com', '.org', '.edu')):
+        raise ValueError('仅支持商业邮箱')
+    return v
+
+# 序列化系统增强 - 多格式输出
+from fastorm.serialization import SerializationEngine
+
+engine = SerializationEngine()
+await engine.register_formatter('yaml', YAMLFormatter())
+yaml_output = await engine.serialize(users, format='yaml')
+
+# 批量操作增强 - 企业级性能
+from fastorm.query.batch import BatchEngine, PartitionStrategy
+
+batch_engine = BatchEngine(
+    strategy=PartitionStrategy.BY_HASH,
+    partition_size=5000,
+    parallel_workers=4
+)
+result = await batch_engine.parallel_bulk_insert(User, large_dataset)
+```
+
 ### 🎯 现有项目无缝集成
 ```bash
 # 自动检测现有FastAPI项目
@@ -589,36 +723,6 @@ $ fastorm convert app/models.py
 ✅ 转换Comment模型
 ✅ 生成FastORM模型文件
 ✅ 创建对比文档
-```
-
-### ⚡ 读写分离支持
-```python
-from fastorm import ReadWriteRepository
-
-class UserRepository(ReadWriteRepository):
-    model = User
-
-# 配置主从数据库
-DATABASE_CONFIG = {
-    "master": "postgresql://master-host/db",
-    "slaves": [
-        "postgresql://slave1-host/db",
-        "postgresql://slave2-host/db"
-    ]
-}
-
-user_repo = UserRepository()
-
-# 读操作自动路由到从库
-users = await user_repo.get_many({"status": "active"})
-
-# 写操作自动路由到主库
-user = await user_repo.create({"name": "新用户"})
-
-# 事务中的操作统一使用主库
-async with user_repo.transaction_context():
-    user = await user_repo.create({"name": "用户A"})
-    await user_repo.create({"name": "用户B"})
 ```
 
 ## 🎓 学习资源
