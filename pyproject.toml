@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "fastorm"
-version = "1.0.0"
+version = "0.1.0"
 description = "🚀 专为FastAPI优化的现代异步ORM框架 - FastAPI + SQLAlchemy 2.0 + Pydantic 2.11 的完美融合"
 readme = "README.md"
 license = {file = "LICENSE"}
@@ -26,7 +26,7 @@ keywords = [
     "modern"
 ]
 classifiers = [
-    "Development Status :: 5 - Production/Stable",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
@@ -99,15 +99,15 @@ docs = [
 profiling = [
     "py-spy>=0.3.14,<1.0.0",
     "memory-profiler>=0.61.0,<1.0.0",
+    "psutil>=5.9.0,<6.0.0",
 ]
 
 [project.urls]
-Homepage = "https://fastorm.dev"
-Documentation = "https://fastorm.dev/docs"
-Repository = "https://github.com/fastorm/fastorm"
-Issues = "https://github.com/fastorm/fastorm/issues"
-Changelog = "https://github.com/fastorm/fastorm/blob/main/CHANGELOG.md"
-Sponsor = "https://github.com/sponsors/fastorm"
+Homepage = "https://github.com/efarsoft/FastORM"
+Documentation = "https://github.com/efarsoft/FastORM/blob/main/README.md"
+Repository = "https://github.com/efarsoft/FastORM"
+Issues = "https://github.com/efarsoft/FastORM/issues"
+Changelog = "https://github.com/efarsoft/FastORM/blob/main/CHANGELOG.md"
 
 [project.scripts]
 fastorm = "fastorm.cli:main"

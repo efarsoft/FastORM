@@ -11,19 +11,17 @@ Usage:
     fastorm migrate             # 运行数据库迁移
 """
 
-import click
 import sys
 
-from .commands import (
-    init,
-    create_model,
-    migrate,
-    db,
-    serve,
-    setup,
-    convert
-)
+import click
 
+from .commands import convert
+from .commands import create_model
+from .commands import db
+from .commands import init
+from .commands import migrate
+from .commands import serve
+from .commands import setup
 
 # CLI版本信息
 __version__ = "1.0.0"
@@ -31,33 +29,33 @@ __version__ = "1.0.0"
 
 @click.group()
 @click.version_option(version=__version__, prog_name="FastORM CLI")
-@click.option('--verbose', '-v', is_flag=True, help='启用详细输出')
-@click.option('--quiet', '-q', is_flag=True, help='静默模式')
+@click.option("--verbose", "-v", is_flag=True, help="启用详细输出")
+@click.option("--quiet", "-q", is_flag=True, help="静默模式")
 @click.pass_context
 def cli(ctx, verbose: bool, quiet: bool):
     """
     🚀 FastORM CLI - 现代化Python ORM开发工具
-    
+
     FastORM = FastAPI + SQLAlchemy 2.0 + Pydantic 2.11 的完美融合
-    
+
     \b
     常用命令:
         fastorm init <project>      创建新的FastORM项目
         fastorm create:model <name> 生成模型代码
         fastorm migrate             运行数据库迁移
         fastorm serve               启动开发服务器
-    
+
     \b
     获取帮助:
         fastorm <command> --help    查看特定命令的帮助
     """
     # 确保上下文对象存在
     ctx.ensure_object(dict)
-    
+
     # 设置全局配置
-    ctx.obj['verbose'] = verbose
-    ctx.obj['quiet'] = quiet
-    
+    ctx.obj["verbose"] = verbose
+    ctx.obj["quiet"] = quiet
+
     # 配置日志级别
     if verbose and not quiet:
         click.echo(f"🔧 FastORM CLI v{__version__} - 详细模式")
@@ -65,7 +63,7 @@ def cli(ctx, verbose: bool, quiet: bool):
 
 # 注册命令组
 cli.add_command(init)
-cli.add_command(create_model, name='create:model')
+cli.add_command(create_model, name="create:model")
 cli.add_command(migrate)
 cli.add_command(db)
 cli.add_command(serve)
@@ -85,5 +83,5 @@ def main():
         sys.exit(1)
 
 
-if __name__ == '__main__':
-    main() 
+if __name__ == "__main__":
+    main()

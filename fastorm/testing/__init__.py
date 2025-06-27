@@ -14,7 +14,7 @@ FastORM 测试支持模块
 class UserFactory(Factory):
     class Meta:
         model = User
-    
+
     name = faker.name()
     email = faker.email()
 
@@ -34,34 +34,34 @@ class UserTestCase(TestCase):
 ```
 """
 
-from .factory import Factory, trait, LazyAttribute, Sequence
-from .seeder import Seeder, DatabaseSeeder
-from .testcase import TestCase, DatabaseTestCase
-from .faker_providers import (
-    ChineseProvider, 
-    CompanyProvider, 
-    TestDataProvider,
-    faker
-)
+from .factory import Factory
+from .factory import LazyAttribute
+from .factory import Sequence
+from .factory import trait
+from .faker_providers import ChineseProvider
+from .faker_providers import CompanyProvider
+from .faker_providers import TestDataProvider
+from .faker_providers import faker
+from .seeder import DatabaseSeeder
+from .seeder import Seeder
+from .testcase import DatabaseTestCase
+from .testcase import TestCase
 
 __all__ = [
     # 工厂系统
-    'Factory',
-    'trait', 
-    'LazyAttribute',
-    'Sequence',
-    
+    "Factory",
+    "trait",
+    "LazyAttribute",
+    "Sequence",
     # 数据填充
-    'Seeder',
-    'DatabaseSeeder',
-    
+    "Seeder",
+    "DatabaseSeeder",
     # 测试支持
-    'TestCase',
-    'DatabaseTestCase',
-    
+    "TestCase",
+    "DatabaseTestCase",
     # Faker支持
-    'ChineseProvider',
-    'CompanyProvider', 
-    'TestDataProvider',
-    'faker',
-] 
+    "ChineseProvider",
+    "CompanyProvider",
+    "TestDataProvider",
+    "faker",
+]

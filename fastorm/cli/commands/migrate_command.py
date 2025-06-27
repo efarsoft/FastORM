@@ -4,50 +4,58 @@ FastORM数据库迁移命令
 管理数据库迁移文件的生成、执行和版本控制。
 """
 
-import click
-import sys
 import subprocess
-from pathlib import Path
+import sys
 from datetime import datetime
+from pathlib import Path
+
+import click
 
 
 @click.command()
-@click.option('--message', '-m', help='迁移描述信息')
-@click.option('--auto', is_flag=True, help='自动检测模型变更')
-@click.option('--upgrade', is_flag=True, help='执行迁移到最新版本')
-@click.option('--downgrade', help='回滚到指定版本')
-@click.option('--history', is_flag=True, help='显示迁移历史')
-@click.option('--current', is_flag=True, help='显示当前版本')
+@click.option("--message", "-m", help="迁移描述信息")
+@click.option("--auto", is_flag=True, help="自动检测模型变更")
+@click.option("--upgrade", is_flag=True, help="执行迁移到最新版本")
+@click.option("--downgrade", help="回滚到指定版本")
+@click.option("--history", is_flag=True, help="显示迁移历史")
+@click.option("--current", is_flag=True, help="显示当前版本")
 @click.pass_context
-def migrate(ctx, message: str, auto: bool, upgrade: bool, 
-           downgrade: str, history: bool, current: bool):
+def migrate(
+    ctx,
+    message: str,
+    auto: bool,
+    upgrade: bool,
+    downgrade: str,
+    history: bool,
+    current: bool,
+):
     """
     🗄️ 数据库迁移管理
-    
+
     生成和执行数据库迁移文件，管理数据库schema版本。
-    
+
     \b
     常用操作:
         fastorm migrate --auto -m "添加用户表"    # 自动生成迁移
-        fastorm migrate --upgrade                # 执行所有待执行迁移  
+        fastorm migrate --upgrade                # 执行所有待执行迁移
         fastorm migrate --downgrade base         # 回滚到初始状态
         fastorm migrate --history                # 查看迁移历史
         fastorm migrate --current                # 查看当前版本
-    
+
     \b
     前提条件:
         - 已安装 alembic
         - 存在 alembic.ini 配置文件
         - 数据库连接配置正确
     """
-    verbose = ctx.obj.get('verbose', False)
-    
+    verbose = ctx.obj.get("verbose", False)
+
     # 检查Alembic配置
     if not _check_alembic_setup():
         click.echo("❌ Alembic未配置，正在初始化...")
         if not _init_alembic(verbose):
             sys.exit(1)
-    
+
     try:
         if history:
             _show_migration_history(verbose)
@@ -63,10 +71,10 @@ def migrate(ctx, message: str, auto: bool, upgrade: bool,
             # 默认行为：生成迁移并询问是否执行
             if auto or click.confirm("🔍 是否自动检测模型变更并生成迁移？"):
                 _generate_auto_migration(message, verbose)
-                
+
                 if click.confirm("⬆️ 是否立即执行迁移？"):
                     _upgrade_database(verbose)
-    
+
     except Exception as e:
         click.echo(f"❌ 迁移操作失败: {e}", err=True)
         sys.exit(1)
@@ -74,29 +82,32 @@ def migrate(ctx, message: str, auto: bool, upgrade: bool,
 
 def _check_alembic_setup() -> bool:
     """检查Alembic是否已配置"""
-    return (Path('alembic.ini').exists() and 
-            Path('migrations').exists() and
-            Path('migrations/env.py').exists())
+    return (
+        Path("alembic.ini").exists()
+        and Path("migrations").exists()
+        and Path("migrations/env.py").exists()
+    )
 
 
 def _init_alembic(verbose: bool) -> bool:
     """初始化Alembic配置"""
     if verbose:
         click.echo("🔧 初始化Alembic配置...")
-    
+
     try:
         # 初始化alembic
-        subprocess.run(['alembic', 'init', 'migrations'], 
-                      capture_output=not verbose, check=True)
-        
+        subprocess.run(
+            ["alembic", "init", "migrations"], capture_output=not verbose, check=True
+        )
+
         # 创建配置文件
         _create_alembic_config()
         _create_env_py()
-        
+
         if verbose:
             click.echo("  ✓ Alembic配置完成")
         return True
-        
+
     except subprocess.CalledProcessError as e:
         click.echo(f"❌ Alembic初始化失败: {e}")
         return False
@@ -196,8 +207,8 @@ formatter = generic
 format = %(levelname)-5.5s [%(name)s] %(message)s
 datefmt = %H:%M:%S
 """
-    
-    with open('alembic.ini', 'w', encoding='utf-8') as f:
+
+    with open("alembic.ini", "w", encoding="utf-8") as f:
         f.write(config_content)
 
 
@@ -274,9 +285,9 @@ if context.is_offline_mode():
 else:
     run_migrations_online()
 '''
-    
-    env_file = Path('migrations/env.py')
-    with open(env_file, 'w', encoding='utf-8') as f:
+
+    env_file = Path("migrations/env.py")
+    with open(env_file, "w", encoding="utf-8") as f:
         f.write(env_content)
 
 
@@ -284,25 +295,25 @@ def _generate_auto_migration(message: str, verbose: bool):
     """生成自动迁移文件"""
     if not message:
         message = f"Auto migration {datetime.now().strftime('%Y%m%d_%H%M%S')}"
-    
+
     if verbose:
         click.echo(f"📝 生成迁移文件: {message}")
-    
+
     try:
-        cmd = ['alembic', 'revision', '--autogenerate', '-m', message]
+        cmd = ["alembic", "revision", "--autogenerate", "-m", message]
         result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-        
+
         if verbose:
             click.echo(result.stdout)
-        
+
         # 解析输出获取版本号
-        for line in result.stdout.split('\n'):
-            if 'Generating' in line and 'revision ID' in line:
+        for line in result.stdout.split("\n"):
+            if "Generating" in line and "revision ID" in line:
                 click.echo(f"✅ {line.strip()}")
                 break
         else:
             click.echo("✅ 迁移文件生成完成")
-            
+
     except subprocess.CalledProcessError as e:
         raise Exception(f"生成迁移失败: {e.stderr}")
 
@@ -311,16 +322,16 @@ def _upgrade_database(verbose: bool):
     """升级数据库到最新版本"""
     if verbose:
         click.echo("⬆️ 执行数据库迁移...")
-    
+
     try:
-        cmd = ['alembic', 'upgrade', 'head']
+        cmd = ["alembic", "upgrade", "head"]
         result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-        
+
         if verbose:
             click.echo(result.stdout)
-        
+
         click.echo("✅ 数据库迁移完成")
-        
+
     except subprocess.CalledProcessError as e:
         raise Exception(f"数据库迁移失败: {e.stderr}")
 
@@ -329,16 +340,16 @@ def _downgrade_database(target: str, verbose: bool):
     """降级数据库到指定版本"""
     if verbose:
         click.echo(f"⬇️ 回滚数据库到版本: {target}")
-    
+
     try:
-        cmd = ['alembic', 'downgrade', target]
+        cmd = ["alembic", "downgrade", target]
         result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-        
+
         if verbose:
             click.echo(result.stdout)
-        
+
         click.echo(f"✅ 数据库回滚到 {target} 完成")
-        
+
     except subprocess.CalledProcessError as e:
         raise Exception(f"数据库回滚失败: {e.stderr}")
 
@@ -346,12 +357,12 @@ def _downgrade_database(target: str, verbose: bool):
 def _show_migration_history(verbose: bool):
     """显示迁移历史"""
     try:
-        cmd = ['alembic', 'history', '--verbose' if verbose else '']
+        cmd = ["alembic", "history", "--verbose" if verbose else ""]
         result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-        
+
         click.echo("📜 迁移历史:")
         click.echo(result.stdout)
-        
+
     except subprocess.CalledProcessError as e:
         raise Exception(f"获取迁移历史失败: {e.stderr}")
 
@@ -359,11 +370,11 @@ def _show_migration_history(verbose: bool):
 def _show_current_version(verbose: bool):
     """显示当前数据库版本"""
     try:
-        cmd = ['alembic', 'current', '--verbose' if verbose else '']
+        cmd = ["alembic", "current", "--verbose" if verbose else ""]
         result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-        
+
         click.echo("🔍 当前数据库版本:")
         click.echo(result.stdout or "数据库尚未初始化")
-        
+
     except subprocess.CalledProcessError as e:
-        raise Exception(f"获取当前版本失败: {e.stderr}") 
+        raise Exception(f"获取当前版本失败: {e.stderr}")

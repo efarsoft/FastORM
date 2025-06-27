@@ -43,7 +43,7 @@ import logging
 from typing import TYPE_CHECKING, Any, Dict, Optional
 
 # 版本信息
-__version__ = "1.0.0"
+__version__ = "0.1.0"
 __author__ = "FastORM Team"
 __email__ = "team@fastorm.dev"
 __license__ = "MIT"
