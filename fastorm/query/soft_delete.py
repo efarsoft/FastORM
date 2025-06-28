@@ -70,11 +70,39 @@ class SoftDeleteQueryBuilder(QueryBuilder):
 
         if self.only_deleted:
             # 仅查询已删除记录
-            self._query = self._query.where(deleted_at_column.is_not(None))
+            condition = deleted_at_column.is_not(None)
+            self._conditions.append(condition)
         elif not self.include_deleted:
             # 排除已删除记录（默认行为）
-            self._query = self._query.where(deleted_at_column.is_(None))
+            condition = deleted_at_column.is_(None)
+            self._conditions.append(condition)
         # include_deleted=True 时不添加任何过滤器
+
+    def _reapply_soft_delete_filter(self) -> None:
+        """重新应用软删除过滤器，移除之前的软删除条件"""
+        column_name = getattr(self._model_class, "deleted_at_column", "deleted_at")
+        deleted_at_column = getattr(self._model_class, column_name)
+
+        # 移除之前的软删除条件
+        self._conditions = [
+            condition for condition in self._conditions
+            if not self._is_soft_delete_condition(condition, deleted_at_column)
+        ]
+
+        # 应用新的软删除过滤器
+        if self.only_deleted:
+            condition = deleted_at_column.is_not(None)
+            self._conditions.append(condition)
+        elif not self.include_deleted:
+            condition = deleted_at_column.is_(None)
+            self._conditions.append(condition)
+
+    def _is_soft_delete_condition(self, condition, deleted_at_column) -> bool:
+        """检查条件是否是软删除相关的条件"""
+        # 简单的检查方式：转换为字符串进行比较
+        condition_str = str(condition)
+        column_str = str(deleted_at_column)
+        return column_str in condition_str and ("IS NULL" in condition_str or "IS NOT NULL" in condition_str)
 
     def with_trashed(self) -> SoftDeleteQueryBuilder:
         """包含已删除记录的查询
@@ -87,9 +115,12 @@ class SoftDeleteQueryBuilder(QueryBuilder):
         Example:
             users = await User.with_trashed().all()
         """
-        return SoftDeleteQueryBuilder(
-            self._model_class, include_deleted=True, only_deleted=False
-        )
+        cloned = self.clone()
+        cloned.include_deleted = True
+        cloned.only_deleted = False
+        # 重新应用软删除过滤器
+        cloned._reapply_soft_delete_filter()
+        return cloned
 
     def only_trashed(self) -> SoftDeleteQueryBuilder:
         """仅查询已删除记录
@@ -102,9 +133,12 @@ class SoftDeleteQueryBuilder(QueryBuilder):
         Example:
             deleted_users = await User.only_trashed().all()
         """
-        return SoftDeleteQueryBuilder(
-            self._model_class, include_deleted=False, only_deleted=True
-        )
+        cloned = self.clone()
+        cloned.include_deleted = False
+        cloned.only_deleted = True
+        # 重新应用软删除过滤器
+        cloned._reapply_soft_delete_filter()
+        return cloned
 
     def without_trashed(self) -> SoftDeleteQueryBuilder:
         """排除已删除记录的查询
@@ -117,9 +151,12 @@ class SoftDeleteQueryBuilder(QueryBuilder):
         Example:
             active_users = await User.without_trashed().all()
         """
-        return SoftDeleteQueryBuilder(
-            self._model_class, include_deleted=False, only_deleted=False
-        )
+        cloned = self.clone()
+        cloned.include_deleted = False
+        cloned.only_deleted = False
+        # 重新应用软删除过滤器
+        cloned._reapply_soft_delete_filter()
+        return cloned
 
     def restore(self, ids: list[Any] | None = None) -> SoftDeleteQueryBuilder:
         """构建恢复查询

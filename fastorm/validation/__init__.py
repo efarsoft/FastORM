@@ -34,6 +34,7 @@ from .model_validators import ModelValidatorRegistry
 from .model_validators import register_model_validator
 from .rules import ValidationRule
 from .rules import create_validation_rule
+from .rules import get_validation_rule_registry
 
 __all__ = [
     # Pydantic 2.11 验证器
@@ -55,6 +56,7 @@ __all__ = [
     # 验证规则
     "ValidationRule",
     "create_validation_rule",
+    "get_validation_rule_registry",
     # 装饰器
     "validate_field",
     "validate_model",

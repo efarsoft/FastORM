@@ -6,7 +6,7 @@ FastORM 软删除 Mixin
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, ClassVar
 
 from sqlalchemy import DateTime
@@ -16,6 +16,14 @@ from sqlalchemy.orm import Mapped
 from sqlalchemy.orm import mapped_column
 
 from fastorm.core.session_manager import execute_with_session
+
+
+# 定义软删除全局作用域
+def _soft_delete_global_scope(self, query):
+    """软删除全局作用域：自动排除已删除记录"""
+    if getattr(self.__class__, 'soft_delete', False):
+        return query.where(f'{self.__class__.deleted_at_column}', None)
+    return query
 
 
 class SoftDeleteMixin:
@@ -55,6 +63,17 @@ class SoftDeleteMixin:
     await user.force_delete()
     ```
     """
+
+    def __init_subclass__(cls, **kwargs):
+        """子类初始化时自动注册软删除全局作用域"""
+        super().__init_subclass__(**kwargs)
+        
+        # 如果启用了软删除，注册全局作用域
+        if getattr(cls, 'soft_delete', False):
+            from fastorm.mixins.scopes import _scope_registry
+            _scope_registry.register_global_scope(
+                cls, 'soft_delete_filter', _soft_delete_global_scope
+            )
 
     # =================================================================
     # 配置选项
@@ -144,7 +163,7 @@ class SoftDeleteMixin:
             raise ValueError("模型未启用软删除功能")
 
         # 设置删除时间
-        self.set_deleted_at(datetime.utcnow())
+        self.set_deleted_at(datetime.now(timezone.utc))
 
         # 保存更改
         await self.save()

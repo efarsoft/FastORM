@@ -63,7 +63,7 @@ class HasOne(Relation[Any]):
 
         # 执行查询
         result = await session.execute(query)
-        instance = result.scalars().first()
+        instance = result.scalars().one_or_none()
 
         # 缓存结果
         self.set_cache(instance)

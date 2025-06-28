@@ -229,10 +229,11 @@ class ScopedQueryBuilder:
         users = await User.without_global_scope('soft_delete_filter').get()
         ```
         """
-        # 创建新的查询构建器，不应用指定的全局作用域
-        new_builder = ScopedQueryBuilder(
-            self._query_builder.__class__(self._model_class), self._model_class
-        )
+        # 创建不自动应用全局作用域的构建器
+        new_builder = object.__new__(ScopedQueryBuilder)
+        new_builder._query_builder = self._query_builder.__class__(self._model_class)
+        new_builder._model_class = self._model_class
+        new_builder._applied_global_scopes = []
 
         # 应用除了指定作用域之外的所有全局作用域
         global_scopes = _scope_registry.get_global_scopes(self._model_class)
@@ -257,16 +258,15 @@ class ScopedQueryBuilder:
         Returns:
             新的作用域查询构建器实例
         """
+        # 创建不自动应用全局作用域的构建器
+        new_builder = object.__new__(ScopedQueryBuilder)
+        new_builder._query_builder = self._query_builder.__class__(self._model_class)
+        new_builder._model_class = self._model_class
+        new_builder._applied_global_scopes = []
+        
         if scope_names is None:
             # 移除所有全局作用域
-            return ScopedQueryBuilder(
-                self._query_builder.__class__(self._model_class), self._model_class
-            )
-
-        # 移除指定的作用域
-        new_builder = ScopedQueryBuilder(
-            self._query_builder.__class__(self._model_class), self._model_class
-        )
+            return new_builder
 
         global_scopes = _scope_registry.get_global_scopes(self._model_class)
         for name, scope_func in global_scopes.items():

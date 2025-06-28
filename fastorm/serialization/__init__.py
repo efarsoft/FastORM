@@ -21,6 +21,7 @@ from .exceptions import FieldSerializationError
 from .exceptions import FormatterError
 from .exceptions import RelationSerializationError
 from .exceptions import SerializationError
+from .exceptions import CircularReferenceError
 from .exceptions import convert_pydantic_serialization_error
 from .fields import FieldConfig
 from .fields import FieldMapping
@@ -73,5 +74,6 @@ __all__ = [
     "FieldSerializationError",
     "RelationSerializationError",
     "FormatterError",
+    "CircularReferenceError",
     "convert_pydantic_serialization_error",
 ]

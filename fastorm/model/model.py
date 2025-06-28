@@ -25,6 +25,7 @@ from fastorm.mixins.events import EventMixin
 from fastorm.mixins.pydantic_integration import PydanticIntegrationMixin
 from fastorm.mixins.scopes import ScopeMixin
 from fastorm.mixins.scopes import create_scoped_query
+from fastorm.mixins.soft_delete import SoftDeleteMixin
 
 if TYPE_CHECKING:
     from fastorm.query.builder import QueryBuilder
@@ -51,7 +52,13 @@ class DeclarativeBase(SQLAlchemyDeclarativeBase):
     )
 
 
-class Model(DeclarativeBase, EventMixin, PydanticIntegrationMixin, ScopeMixin):
+class Model(
+    DeclarativeBase,
+    EventMixin,
+    PydanticIntegrationMixin,
+    ScopeMixin,
+    SoftDeleteMixin,
+):
     """FastORM模型基类
 
     实现真正简洁的API，无需手动管理session，自动集成事件系统和Pydantic V2验证。
@@ -288,7 +295,7 @@ class Model(DeclarativeBase, EventMixin, PydanticIntegrationMixin, ScopeMixin):
 
     @classmethod
     async def find(cls: type[T], id: Any, *, force_write: bool = False) -> T | None:
-        """通过主键查找记录 - 无需session参数！自动使用读库
+        """通过主键查找记录 - 无需session参数！自动使用读库，自动应用软删除过滤
 
         Args:
             id: 主键值
@@ -301,7 +308,14 @@ class Model(DeclarativeBase, EventMixin, PydanticIntegrationMixin, ScopeMixin):
             user = await User.find(1)  # 使用读库
             user = await User.find(1, force_write=True)  # 强制使用写库
         """
-
+        # 如果启用软删除，使用where查询来应用软删除过滤器
+        if getattr(cls, 'soft_delete', False):
+            query = cls.where('id', id)
+            if force_write:
+                query = query.force_write()
+            return await query.first()
+        
+        # 否则使用原有的直接查询方式
         async def _find(session: AsyncSession) -> T | None:
             return await session.get(cls, id)
 
@@ -335,7 +349,7 @@ class Model(DeclarativeBase, EventMixin, PydanticIntegrationMixin, ScopeMixin):
 
     @classmethod
     async def all(cls: type[T]) -> list[T]:
-        """获取所有记录 - 无需session参数！使用读库
+        """获取所有记录 - 无需session参数！使用读库，自动应用软删除过滤和全局作用域
 
         Returns:
             所有记录列表
@@ -343,12 +357,8 @@ class Model(DeclarativeBase, EventMixin, PydanticIntegrationMixin, ScopeMixin):
         Example:
             users = await User.all()
         """
-
-        async def _all(session: AsyncSession) -> list[T]:
-            result = await session.execute(select(cls))
-            return list(result.scalars().all())
-
-        return await execute_with_session(_all, connection_type="read")
+        # 使用作用域查询构建器以确保应用全局作用域
+        return await cls.query().get()
 
     @classmethod
     async def count(cls: type[T]) -> int:
@@ -531,24 +541,32 @@ class Model(DeclarativeBase, EventMixin, PydanticIntegrationMixin, ScopeMixin):
 
         await execute_with_session(_save)
 
-    async def delete(self) -> None:
-        """删除当前实例 - 无需session参数，自动触发事件！
+    async def delete(self, force: bool = False) -> None:
+        """删除当前实例 - 支持软删除和强制删除
+
+        Args:
+            force: 是否强制物理删除，默认False使用软删除（如果启用）
 
         Example:
-            await user.delete()
+            await user.delete()  # 软删除（如果启用）
+            await user.delete(force=True)  # 物理删除
         """
+        # 如果启用软删除且不是强制删除，使用软删除
+        if getattr(self, 'soft_delete', False) and not force:
+            await self.soft_delete_record()
+        else:
+            # 物理删除
+            async def _delete(session: AsyncSession) -> None:
+                # 触发 before_delete 事件
+                await self.fire_event("before_delete")
 
-        async def _delete(session: AsyncSession) -> None:
-            # 触发 before_delete 事件
-            await self.fire_event("before_delete")
+                await session.delete(self)
+                await session.flush()
 
-            await session.delete(self)
-            await session.flush()
+                # 触发 after_delete 事件
+                await self.fire_event("after_delete")
 
-            # 触发 after_delete 事件
-            await self.fire_event("after_delete")
-
-        await execute_with_session(_delete)
+            await execute_with_session(_delete)
 
     async def update(self, **values: Any) -> None:
         """更新当前实例 - 无需session参数，自动触发事件！自动更新时间戳
@@ -604,8 +622,6 @@ class Model(DeclarativeBase, EventMixin, PydanticIntegrationMixin, ScopeMixin):
             users = await User.where('age', '>', 18).get()
             users = await User.where('name', 'John').get()
         """
-        from fastorm.query.builder import QueryBuilder
-
         # 处理参数重载
         if value is None:
             # where('name', 'John') 形式
@@ -616,7 +632,65 @@ class Model(DeclarativeBase, EventMixin, PydanticIntegrationMixin, ScopeMixin):
             actual_operator = operator
             actual_value = value
 
-        return QueryBuilder(cls).where(column, actual_operator, actual_value)
+        # 如果启用软删除，使用SoftDeleteQueryBuilder
+        if getattr(cls, 'soft_delete', False):
+            from fastorm.query.soft_delete import SoftDeleteQueryBuilder
+            return SoftDeleteQueryBuilder(cls).where(column, actual_operator, actual_value)
+        else:
+            from fastorm.query.builder import QueryBuilder
+            return QueryBuilder(cls).where(column, actual_operator, actual_value)
+
+    @classmethod
+    def with_trashed(cls: type[T]):
+        """包含已删除记录的查询
+        
+        Returns:
+            包含已删除记录的软删除查询构建器
+            
+        Example:
+            all_users = await User.with_trashed().all()
+        """
+        if not getattr(cls, 'soft_delete', False):
+            # 如果模型未启用软删除，返回普通查询构建器
+            from fastorm.query.builder import QueryBuilder
+            return QueryBuilder(cls)
+        
+        from fastorm.query.soft_delete import SoftDeleteQueryBuilder
+        return SoftDeleteQueryBuilder(cls, include_deleted=True)
+
+    @classmethod
+    def only_trashed(cls: type[T]):
+        """仅查询已删除记录
+        
+        Returns:
+            仅包含已删除记录的软删除查询构建器
+            
+        Example:
+            deleted_users = await User.only_trashed().all()
+        """
+        if not getattr(cls, 'soft_delete', False):
+            raise ValueError(f"模型 {cls.__name__} 未启用软删除功能")
+        
+        from fastorm.query.soft_delete import SoftDeleteQueryBuilder
+        return SoftDeleteQueryBuilder(cls, only_deleted=True)
+
+    @classmethod
+    def without_trashed(cls: type[T]):
+        """排除已删除记录的查询（默认行为）
+        
+        Returns:
+            排除已删除记录的软删除查询构建器
+            
+        Example:
+            active_users = await User.without_trashed().all()
+        """
+        if not getattr(cls, 'soft_delete', False):
+            # 如果模型未启用软删除，返回普通查询构建器
+            from fastorm.query.builder import QueryBuilder
+            return QueryBuilder(cls)
+        
+        from fastorm.query.soft_delete import SoftDeleteQueryBuilder
+        return SoftDeleteQueryBuilder(cls, include_deleted=False)
 
     @classmethod
     def query(cls: type[T]) -> QueryBuilder[T]:

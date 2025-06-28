@@ -35,8 +35,8 @@ class RelationProxy:
         """
         self._relation = relation
         self._parent = parent
-        self._loaded_data: Any | None = None
         self._is_loaded = False
+        self._loaded_data: Any | None = None
 
     async def load(self) -> Any:
         """加载关系数据"""
