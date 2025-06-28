@@ -50,8 +50,6 @@ class Relation(Generic[T], ABC):
 
         self.foreign_key = foreign_key
         self.local_key = local_key
-        self._loaded = False
-        self._cache = None
 
     @property
     def model_class(self) -> type[T]:
@@ -154,21 +152,3 @@ class Relation(Generic[T], ABC):
             本地键的值
         """
         return getattr(parent, self.local_key, None)
-
-    def clear_cache(self) -> None:
-        """清空缓存"""
-        self._loaded = False
-        self._cache = None
-
-    def is_loaded(self) -> bool:
-        """检查是否已加载"""
-        return self._loaded
-
-    def get_cache(self) -> Any:
-        """获取缓存数据"""
-        return self._cache
-
-    def set_cache(self, data: Any) -> None:
-        """设置缓存数据"""
-        self._cache = data
-        self._loaded = True

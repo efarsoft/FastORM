@@ -14,7 +14,6 @@ from .belongs_to_many import BelongsToMany
 from .has_many import HasMany
 from .has_one import HasOne
 from .loader import RelationLoader
-from .loader import RelationProxy
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,80 +25,129 @@ class RelationProxy:
     提供延迟加载和便捷方法。
     """
 
-    def __init__(self, relation: Relation[Any], parent: Any):
+    def __init__(self, relation: Relation[Any], parent: Any, relation_name: str):
         """初始化关系代理
 
         Args:
             relation: 关系对象
             parent: 父模型实例
+            relation_name: 关系在父模型上的属性名
         """
         self._relation = relation
         self._parent = parent
-        self._is_loaded = False
-        self._loaded_data: Any | None = None
+        self._relation_name = relation_name
+        self._cache_key = f"_{relation_name}_cache"
+        self._loaded_key = f"_{relation_name}_loaded"
+
+    def _is_loaded(self) -> bool:
+        """检查关系是否已在父实例上加载"""
+        return getattr(self._parent, self._loaded_key, False)
+
+    def _get_cache(self) -> Any | None:
+        """从父实例获取缓存"""
+        return getattr(self._parent, self._cache_key, None)
+
+    def _set_cache(self, data: Any) -> None:
+        """在父实例上设置缓存"""
+        setattr(self._parent, self._cache_key, data)
+        setattr(self._parent, self._loaded_key, True)
+
+    def _clear_cache(self) -> None:
+        """清空父实例上的缓存"""
+        if hasattr(self._parent, self._cache_key):
+            delattr(self._parent, self._cache_key)
+        if hasattr(self._parent, self._loaded_key):
+            delattr(self._parent, self._loaded_key)
 
     async def load(self) -> Any:
         """加载关系数据"""
+        if self._is_loaded():
+            return self._get_cache()
+
         from fastorm.core.session_manager import execute_with_session
 
         async def _load(session: AsyncSession) -> Any:
-            data = await self._relation.load(self._parent, session)
-            self._loaded_data = data
-            self._is_loaded = True
-            return data
+            return await self._relation.load(self._parent, session)
 
-        return await execute_with_session(_load)
+        data = await execute_with_session(_load)
+        self._set_cache(data)
+        return data
+
+    def __await__(self):
+        """支持 await 语法，例如 `await user.profile`"""
+        return self.load().__await__()
 
     async def create(self, **attributes: Any) -> Any:
         """通过关系创建新记录"""
-        return await self._relation.create(self._parent, **attributes)
+        instance = await self._relation.create(self._parent, **attributes)
+        self._clear_cache()
+        return instance
 
     async def save(self, instance: Any) -> Any:
         """保存关联模型实例"""
-        return await self._relation.save(self._parent, instance)
+        saved_instance = await self._relation.save(self._parent, instance)
+        self._clear_cache()
+        return saved_instance
 
     async def count(self) -> int:
         """统计关联记录数量"""
+        # 对于count，我们可以直接调用，因为它不依赖于加载状态
         return await self._relation.count(self._parent)
 
     # 多对多关系的方法
     async def attach(self, ids: Any, pivot_data: dict[str, Any] | None = None) -> None:
         """附加关联记录（多对多）"""
         if hasattr(self._relation, "attach"):
-            return await self._relation.attach(self._parent, ids, pivot_data)
-        raise AttributeError(f"Relation {type(self._relation)} does not support attach")
+            await self._relation.attach(self._parent, ids, pivot_data)
+            self._clear_cache()
+        else:
+            raise AttributeError(
+                f"Relation {type(self._relation)} does not support attach"
+            )
 
     async def detach(self, ids: Any | None = None) -> None:
         """分离关联记录（多对多）"""
         if hasattr(self._relation, "detach"):
-            return await self._relation.detach(self._parent, ids)
-        raise AttributeError(f"Relation {type(self._relation)} does not support detach")
+            await self._relation.detach(self._parent, ids)
+            self._clear_cache()
+        else:
+            raise AttributeError(
+                f"Relation {type(self._relation)} does not support detach"
+            )
 
     async def sync(
         self, ids: list[Any], pivot_data: dict[str, Any] | None = None
     ) -> None:
         """同步关联记录（多对多）"""
         if hasattr(self._relation, "sync"):
-            return await self._relation.sync(self._parent, ids, pivot_data)
-        raise AttributeError(f"Relation {type(self._relation)} does not support sync")
+            await self._relation.sync(self._parent, ids, pivot_data)
+            self._clear_cache()
+        else:
+            raise AttributeError(
+                f"Relation {type(self._relation)} does not support sync"
+            )
 
     async def toggle(
         self, ids: Any, pivot_data: dict[str, Any] | None = None
     ) -> dict[str, list[int]]:
         """切换关联状态（多对多）"""
         if hasattr(self._relation, "toggle"):
-            return await self._relation.toggle(self._parent, ids, pivot_data)
+            result = await self._relation.toggle(self._parent, ids, pivot_data)
+            self._clear_cache()
+            return result
         raise AttributeError(f"Relation {type(self._relation)} does not support toggle")
 
     @property
     def is_loaded(self) -> bool:
         """是否已加载"""
-        return self._is_loaded
+        return self._is_loaded()
 
     @property
     def data(self) -> Any:
-        """获取已加载的数据"""
-        return self._loaded_data
+        """获取已加载的数据（如果未加载则返回None）"""
+        if not self._is_loaded():
+            return None
+        return self._get_cache()
 
 
 class RelationMixin:
@@ -159,7 +207,8 @@ class RelationMixin:
             # 检查是否已有缓存的代理
             proxy_attr = f"_{name}_proxy"
             if not hasattr(self, proxy_attr):
-                setattr(self, proxy_attr, RelationProxy(relation, self))
+                # 将关系名传递给代理，以便生成缓存键
+                setattr(self, proxy_attr, RelationProxy(relation, self, name))
             return getattr(self, proxy_attr)
 
         return property(getter)
@@ -357,7 +406,7 @@ class RelationMixin:
             # 检查是否是关系对象
             if hasattr(attr, "model_class") and hasattr(attr, "load"):
                 # 返回关系代理
-                return RelationProxy(attr, self)
+                return RelationProxy(attr, self, name)
 
             return attr
         except AttributeError:

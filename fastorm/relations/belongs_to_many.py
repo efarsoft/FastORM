@@ -80,14 +80,9 @@ class BelongsToMany(Relation[list[Any]]):
         Returns:
             关联的模型实例列表
         """
-        # 检查缓存
-        if self.is_loaded():
-            return self.get_cache() or []
-
         # 获取本地键值
         local_key_value = self.get_local_key_value(parent)
         if local_key_value is None:
-            self.set_cache([])
             return []
 
         # 获取配置
@@ -112,8 +107,6 @@ class BelongsToMany(Relation[list[Any]]):
         result = await session.execute(query)
         instances = list(result.scalars().all())
 
-        # 缓存结果
-        self.set_cache(instances)
         return instances
 
     def get_pivot_table(self, parent: Any) -> str:
@@ -209,9 +202,6 @@ class BelongsToMany(Relation[list[Any]]):
                     },
                 )
 
-            # 清空缓存
-            self.clear_cache()
-
         await execute_with_session(_attach)
 
     async def detach(self, parent: Any, ids: int | list[int] | None = None) -> None:
@@ -251,12 +241,9 @@ class BelongsToMany(Relation[list[Any]]):
                         """),
                         {
                             "local_id": local_key_value,
-                            **{f"id{i}": id_val for i, id_val in enumerate(id_list)},
+                            **{f"id{i}": v for i, v in enumerate(id_list)},
                         },
                     )
-
-            # 清空缓存
-            self.clear_cache()
 
         await execute_with_session(_detach)
 
@@ -308,23 +295,33 @@ class BelongsToMany(Relation[list[Any]]):
             else:
                 id_list = ids
 
+            pivot_table = self.get_pivot_table(parent)
+            foreign_key = self.get_foreign_key(parent)
+            related_key = self.get_related_key()
+            local_key_value = self.get_local_key_value(parent)
+
             # 获取当前关联的ID
-            current_relations = await self.load(parent, session)
-            current_ids = [
-                getattr(instance, self.related_local_key)
-                for instance in current_relations
-            ]
+            current_ids_result = await session.execute(
+                text(
+                    f"SELECT {related_key} FROM {pivot_table} WHERE {foreign_key} = :local_id"
+                ),
+                {"local_id": local_key_value},
+            )
+            current_ids = {row[0] for row in current_ids_result}
 
             attached = []
             detached = []
 
-            for related_id in id_list:
-                if related_id in current_ids:
-                    await self.detach(parent, related_id)
-                    detached.append(related_id)
+            for an_id in id_list:
+                if an_id in current_ids:
+                    detached.append(an_id)
                 else:
-                    await self.attach(parent, related_id, pivot_data)
-                    attached.append(related_id)
+                    attached.append(an_id)
+
+            if detached:
+                await self.detach(parent, detached)
+            if attached:
+                await self.attach(parent, attached, pivot_data)
 
             return {"attached": attached, "detached": detached}
 

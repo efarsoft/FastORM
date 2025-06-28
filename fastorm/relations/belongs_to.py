@@ -45,16 +45,11 @@ class BelongsTo(Relation[Any]):
         Returns:
             关联的模型实例，如果不存在则返回None
         """
-        # 检查缓存
-        if self.is_loaded():
-            return self.get_cache()
-
         # 获取外键值
         foreign_key = self.get_foreign_key(parent)
         foreign_key_value = getattr(parent, foreign_key, None)
 
         if foreign_key_value is None:
-            self.set_cache(None)
             return None
 
         # 构建查询
@@ -66,8 +61,6 @@ class BelongsTo(Relation[Any]):
         result = await session.execute(query)
         instance = result.scalars().first()
 
-        # 缓存结果
-        self.set_cache(instance)
         return instance
 
     def get_foreign_key(self, parent: Any) -> str:

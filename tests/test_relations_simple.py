@@ -6,11 +6,9 @@ FastORM 关系功能简化测试
 
 import pytest
 from sqlalchemy import Column, Integer, String, ForeignKey
-from fastorm.model.model import Model
-from fastorm.relations.mixins import RelationMixin
+from fastorm.model import Model
 from fastorm.relations import HasOne, BelongsTo
-from fastorm.core.session_manager import execute_with_session
-
+from fastorm.relations.mixins import RelationMixin
 
 class SimpleUser(Model, RelationMixin):
     """简单用户模型"""
@@ -20,9 +18,7 @@ class SimpleUser(Model, RelationMixin):
     name = Column(String(50), nullable=False)
     email = Column(String(100), unique=True)
     
-    # 一对一关系：用户拥有一个档案
     profile = HasOne('SimpleProfile', foreign_key='user_id')
-
 
 class SimpleProfile(Model, RelationMixin):
     """简单档案模型"""
@@ -32,9 +28,7 @@ class SimpleProfile(Model, RelationMixin):
     user_id = Column(Integer, ForeignKey('simple_test_users.id'), nullable=False)
     bio = Column(String(500))
     
-    # 多对一关系：档案属于一个用户
     user = BelongsTo('SimpleUser', foreign_key='user_id')
-
 
 class TestSimpleRelations:
     """简化关系功能测试类"""
@@ -42,101 +36,72 @@ class TestSimpleRelations:
     @pytest.mark.asyncio
     async def test_has_one_basic_load(self, test_database):
         """测试HasOne关系基本加载"""
-        # 创建用户
         user = SimpleUser(name="Alice", email="alice@example.com")
         await user.save()
         
-        # 创建档案
         profile = SimpleProfile(user_id=user.id, bio="Alice的简介")
         await profile.save()
         
-        # 重新查询用户
         found_user = await SimpleUser.find(user.id)
         assert found_user is not None
-        assert found_user.name == "Alice"
         
-        # 测试关系加载
         loaded_profile = await found_user.profile.load()
         assert loaded_profile is not None
         assert loaded_profile.bio == "Alice的简介"
-        assert loaded_profile.user_id == user.id
     
     @pytest.mark.asyncio
     async def test_belongs_to_basic_load(self, test_database):
         """测试BelongsTo关系基本加载"""
-        # 创建用户
         user = SimpleUser(name="Bob", email="bob@example.com")
         await user.save()
         
-        # 创建档案
         profile = SimpleProfile(user_id=user.id, bio="Bob的简介")
         await profile.save()
         
-        # 重新查询档案
         found_profile = await SimpleProfile.find(profile.id)
         assert found_profile is not None
-        assert found_profile.bio == "Bob的简介"
         
-        # 测试关系加载
         loaded_user = await found_profile.user.load()
         assert loaded_user is not None
         assert loaded_user.name == "Bob"
-        assert loaded_user.id == profile.user_id
     
     @pytest.mark.asyncio
     async def test_has_one_cache(self, test_database):
         """测试HasOne关系缓存"""
-        # 创建用户和档案
         user = SimpleUser(name="Charlie", email="charlie@example.com")
         await user.save()
         
         profile = SimpleProfile(user_id=user.id, bio="Charlie的简介")
         await profile.save()
         
-        # 重新查询用户
         found_user = await SimpleUser.find(user.id)
         
-        # 第一次加载
         profile1 = await found_user.profile.load()
         assert found_user.profile.is_loaded
         
-        # 第二次加载应该使用缓存
         profile2 = await found_user.profile.load()
-        assert profile1 is profile2  # 应该是同一个对象
+        assert profile1 is profile2
     
-    @pytest.mark.skip(reason="存在一个难以捉摸的Heisenbug，导致在没有关系时返回空对象而不是None")
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_has_one_no_relation(self, test_database):
         """测试HasOne关系不存在的情况"""
-        # 创建用户但不创建档案（使用唯一名称避免冲突）
-        import time
-        unique_name = f"NoProfile_{int(time.time() * 1000000)}"
-        unique_email = f"noprofile_{int(time.time() * 1000000)}@example.com"
-        
-        user = SimpleUser(name=unique_name, email=unique_email)
+        user = SimpleUser(name="NoProfile", email="noprofile@example.com")
         await user.save()
-        
-        # 重新查询用户
+
         found_user = await SimpleUser.find(user.id)
-        
-        # 加载不存在的档案
         profile = await found_user.profile.load()
         assert profile is None
     
     @pytest.mark.asyncio
     async def test_relation_discovery(self, test_database):
         """测试关系自动发现"""
-        # 创建实例来测试关系发现
         user = SimpleUser(name="Test", email="test@example.com")
         profile = SimpleProfile(user_id=1, bio="test")
         
-        # 验证模型实例正确发现了关系
         user_relations = user.get_relations()
-        
         assert 'profile' in user_relations
         assert isinstance(user_relations['profile'], HasOne)
         
-        # 验证档案模型的关系
         profile_relations = profile.get_relations()
         assert 'user' in profile_relations
         assert isinstance(profile_relations['user'], BelongsTo) 

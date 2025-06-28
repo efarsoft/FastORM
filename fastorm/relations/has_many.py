@@ -54,14 +54,9 @@ class HasMany(Relation[list[Any]]):
         Returns:
             关联的模型实例列表
         """
-        # 检查缓存
-        if self.is_loaded():
-            return self.get_cache() or []
-
         # 获取本地键值
         local_key_value = self.get_local_key_value(parent)
         if local_key_value is None:
-            self.set_cache([])
             return []
 
         # 获取外键名
@@ -76,8 +71,6 @@ class HasMany(Relation[list[Any]]):
         result = await session.execute(query)
         instances = result.scalars().all()
 
-        # 缓存结果
-        self.set_cache(instances)
         return instances
 
     def get_foreign_key(self, parent: Any) -> str:
@@ -118,9 +111,6 @@ class HasMany(Relation[list[Any]]):
             await session.flush()
             await session.refresh(instance)
 
-            # 清空缓存以便重新加载
-            self.clear_cache()
-
             return instance
 
         return await execute_with_session(_create)
@@ -146,9 +136,6 @@ class HasMany(Relation[list[Any]]):
             session.add(instance)
             await session.flush()
             await session.refresh(instance)
-
-            # 清空缓存
-            self.clear_cache()
 
             return instance
 
@@ -181,9 +168,6 @@ class HasMany(Relation[list[Any]]):
             for instance in saved_instances:
                 await session.refresh(instance)
 
-            # 清空缓存
-            self.clear_cache()
-
             return saved_instances
 
         return await execute_with_session(_save_many)
@@ -215,9 +199,6 @@ class HasMany(Relation[list[Any]]):
             )
             instances = result.scalars().all()
 
-            # 清空缓存
-            self.clear_cache()
-
             return instances
 
         return await execute_with_session(_create_many)
@@ -241,9 +222,6 @@ class HasMany(Relation[list[Any]]):
                     getattr(self.model_class, foreign_key) == local_key_value
                 )
             )
-
-            # 清空缓存
-            self.clear_cache()
 
             return result.rowcount
 

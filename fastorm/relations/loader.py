@@ -6,7 +6,7 @@ FastORM 关系加载器
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Optional
 
 from fastorm.core.session_manager import execute_with_session
 
@@ -14,49 +14,6 @@ from .base import Relation
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
-
-
-class RelationProxy:
-    """关系代理类
-
-    提供延迟加载的关系访问。
-    """
-
-    def __init__(self, parent: Any, relation: Relation):
-        """初始化关系代理
-
-        Args:
-            parent: 父模型实例
-            relation: 关系实例
-        """
-        self.parent = parent
-        self.relation = relation
-        self._loaded = False
-        self._cache = None
-
-    async def load(self) -> Any:
-        """加载关系数据"""
-        if self._loaded:
-            return self._cache
-
-        async def _load_relation(session: AsyncSession) -> Any:
-            return await self.relation.load(self.parent, session)
-
-        result = await execute_with_session(_load_relation)
-        self._cache = result
-        self._loaded = True
-        return result
-
-    async def reload(self) -> Any:
-        """重新加载关系数据"""
-        self._loaded = False
-        self._cache = None
-        self.relation.clear_cache()
-        return await self.load()
-
-    def __await__(self):
-        """支持 await 语法"""
-        return self.load().__await__()
 
 
 class RelationLoader:

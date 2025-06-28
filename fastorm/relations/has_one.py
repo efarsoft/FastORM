@@ -43,14 +43,9 @@ class HasOne(Relation[Any]):
         Returns:
             关联的模型实例，如果不存在则返回None
         """
-        # 检查缓存
-        if self.is_loaded():
-            return self.get_cache()
-
         # 获取本地键值
         local_key_value = self.get_local_key_value(parent)
         if local_key_value is None:
-            self.set_cache(None)
             return None
 
         # 获取外键名
@@ -65,8 +60,6 @@ class HasOne(Relation[Any]):
         result = await session.execute(query)
         instance = result.scalars().one_or_none()
 
-        # 缓存结果
-        self.set_cache(instance)
         return instance
 
     def get_foreign_key(self, parent: Any) -> str:
