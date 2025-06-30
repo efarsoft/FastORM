@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "fastorm"
 version = "0.1.0"
-description = "🚀 专为FastAPI优化的现代异步ORM框架 - FastAPI + SQLAlchemy 2.0 + Pydantic 2.11 的完美融合"
+description = "🚀 专为FastAPI优化的现代异步ORM框架 - FastAPI + SQLAlchemy 2.0 + Pydantic 2.11 的完美融合 (开发预览版)"
 readme = "README.md"
 license = {file = "LICENSE"}
 authors = [
@@ -26,7 +26,7 @@ keywords = [
     "modern"
 ]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
@@ -157,7 +157,7 @@ asyncio_default_fixture_loop_scope = "function"
 # 代码格式化
 [tool.black]
 target-version = ["py310", "py311", "py312", "py313"]
-line-length = 88
+line-length = 256
 skip-string-normalization = true
 extend-exclude = '''
 /(
@@ -177,7 +177,7 @@ extend-exclude = '''
 # Ruff配置 - 现代Python linter
 [tool.ruff]
 target-version = "py310"
-line-length = 88
+line-length = 256
 select = [
     "E",   # pycodestyle errors
     "W",   # pycodestyle warnings

@@ -4,9 +4,9 @@
 
 ![FastORM Logo](https://img.shields.io/badge/FastORM-v0.1.0-blue?style=for-the-badge&logo=python)
 
-**🚀 专为FastAPI优化的现代异步ORM框架**
+**🚀 专为FastAPI优化的现代异步ORM框架 (开发预览版 v0.1.0)**
 
-*第十四阶段核心功能补全 - 验证系统增强 · 序列化系统增强 · 批量操作增强*
+*基础功能完成 - 模型系统 · 查询构建器 · 配置管理 · 关系操作*
 
 [![PyPI version](https://img.shields.io/pypi/v/fastorm?style=flat-square)](https://pypi.org/project/fastorm/)
 [![Python versions](https://img.shields.io/pypi/pyversions/fastorm?style=flat-square)](https://pypi.org/project/fastorm/)
