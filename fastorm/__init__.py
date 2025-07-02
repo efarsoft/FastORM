@@ -418,4 +418,9 @@ if TYPE_CHECKING:
     from fastorm.query.builder import QueryBuilder as _QueryBuilder
     from fastorm.connection.database import Database as _Database
 
-logger.info(f"FastORM {__version__} 已加载") 
+logger.info(f"FastORM {__version__} 已加载")
+
+from fastorm.serialization.fields import Field 
+
+# 官方API自动生成器入口
+from .api.crud import create_crud_router 

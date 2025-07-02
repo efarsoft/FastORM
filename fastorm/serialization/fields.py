@@ -15,6 +15,7 @@ from enum import Enum
 from typing import Any
 
 from .exceptions import FieldSerializationError
+from sqlalchemy.orm import mapped_column
 
 
 class FieldType(Enum):
@@ -356,17 +357,16 @@ def create_string_transformer(
     strip: bool = True, lower: bool = False, upper: bool = False
 ) -> Callable[[Any], str]:
     """创建字符串转换器"""
-
     def transform(value: Any) -> str:
-        result = str(value) if value is not None else ""
+        if not isinstance(value, str):
+            value = str(value)
         if strip:
-            result = result.strip()
+            value = value.strip()
         if lower:
-            result = result.lower()
-        elif upper:
-            result = result.upper()
-        return result
-
+            value = value.lower()
+        if upper:
+            value = value.upper()
+        return value
     return transform
 
 
@@ -376,63 +376,32 @@ def create_number_transformer(
     max_value: int | float | None = None,
 ) -> Callable[[Any], int | float]:
     """创建数值转换器"""
-
     def transform(value: Any) -> int | float:
-        if value is None:
-            return 0
-
-        # 转换为数值
         if isinstance(value, str):
-            try:
-                if "." in value or "e" in value.lower():
-                    result = float(value)
-                else:
-                    result = int(value)
-            except ValueError:
-                result = 0
-        else:
-            result = float(value) if isinstance(value, (int, float)) else 0
-
-        # 应用精度
-        if precision is not None and isinstance(result, float):
-            result = round(result, precision)
-
-        # 应用范围限制
+            value = float(value) if "." in value else int(value)
+        if precision is not None:
+            value = round(value, precision)
         if min_value is not None:
-            result = max(result, min_value)
+            value = max(value, min_value)
         if max_value is not None:
-            result = min(result, max_value)
-
-        return result
-
+            value = min(value, max_value)
+        return value
     return transform
 
 
 def create_list_transformer(
-    item_transformer: Callable[[Any], Any] | None = None, max_items: int | None = None
+    item_transformer: Callable[[Any], Any] | None = None,
+    max_items: int | None = None,
 ) -> Callable[[Any], list[Any]]:
     """创建列表转换器"""
-
     def transform(value: Any) -> list[Any]:
-        if value is None:
-            return []
-
-        # 确保是列表
-        if not isinstance(value, (list, tuple, set)):
-            value = [value]
-        else:
+        if not isinstance(value, list):
             value = list(value)
-
-        # 应用项目转换器
         if item_transformer:
-            value = [item_transformer(item) for item in value]
-
-        # 应用长度限制
+            value = [item_transformer(v) for v in value]
         if max_items is not None:
             value = value[:max_items]
-
         return value
-
     return transform
 
 
@@ -442,33 +411,52 @@ def create_dict_transformer(
     exclude_none: bool = True,
 ) -> Callable[[Any], dict[str, Any]]:
     """创建字典转换器"""
-
     def transform(value: Any) -> dict[str, Any]:
-        if value is None:
-            return {}
-
-        # 确保是字典
         if not isinstance(value, dict):
-            return {}
-
+            value = dict(value)
         result = {}
         for k, v in value.items():
-            # 转换键
             if key_transformer:
                 k = key_transformer(k)
-            else:
-                k = str(k)
-
-            # 转换值
             if value_transformer:
                 v = value_transformer(v)
-
-            # 排除None值
             if exclude_none and v is None:
                 continue
-
             result[k] = v
-
         return result
-
     return transform
+
+
+def Field(
+    *,
+    primary_key: bool = False,
+    unique: bool = False,
+    index: bool = False,
+    max_length: int | None = None,
+    min_length: int | None = None,  # 仅用于校验，不影响ORM
+    default: Any = None,
+    nullable: bool = True,
+    ge: int | float | None = None,  # 仅用于校验，不影响ORM
+    le: int | float | None = None,  # 仅用于校验，不影响ORM
+    description: str = "",
+    type_: type = str,  # 新增：类型参数，默认str
+) -> Any:
+    """
+    FastORM 字段声明语法糖，直接返回SQLAlchemy mapped_column。
+    用法示例：
+        id: Mapped[int] = Field(primary_key=True, type_=int)
+        name: Mapped[str] = Field(max_length=100, type_=str)
+    """
+    col_type = type_
+    if max_length and type_ is str:
+        from sqlalchemy import String
+        col_type = String(max_length)
+    return mapped_column(
+        col_type,
+        primary_key=primary_key,
+        unique=unique,
+        index=index,
+        default=default,
+        nullable=nullable,
+        comment=description or None,
+    )

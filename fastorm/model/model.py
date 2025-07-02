@@ -9,14 +9,14 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, ClassVar, TypeVar
 
-from sqlalchemy import Integer, DateTime
+from sqlalchemy import DateTime
 from sqlalchemy import MetaData
 from sqlalchemy import delete
 from sqlalchemy import func
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import DeclarativeBase as SQLAlchemyDeclarativeBase
-from sqlalchemy.orm import Mapped
+
 from sqlalchemy.orm import declared_attr
 from sqlalchemy.orm import mapped_column
 
@@ -59,28 +59,12 @@ class Model(
     ScopeMixin,
     SoftDeleteMixin,
 ):
-    """FastORM模型基类
-
-    实现真正简洁的API，无需手动管理session，自动集成事件系统和Pydantic V2验证。
-    内置时间戳管理功能，支持全局配置和自定义。
-
-    示例:
-    ```python
-    # 🎯 简洁如ThinkORM + 事件支持 + Pydantic验证 + 自动时间戳
-    user = await User.create(name='John', email='john@example.com')
-    users = await User.where('age', '>', 18).limit(10).get()
-    await user.update(name='Jane')  # 自动更新 updated_at
-    await user.delete()
-
-    # 时间戳配置
-    class User(Model):
-        timestamps = True  # 启用时间戳（默认False）
-        created_at_column = "created_time"  # 自定义字段名
-        updated_at_column = "updated_time"  # 自定义字段名
-
-    # 全局关闭时间戳
-    Model.set_global_timestamps(False)
-    ```
+    """
+    FastORM模型基类
+    - 推荐所有模型声明主键字段（如id: Mapped[int] = mapped_column(primary_key=True)）
+    - 支持无主键表/视图的复合伪主键声明：
+        __mapper_args__ = {'primary_key': [col1, col2]}
+    - 未声明主键时，自动校验并抛出友好异常
     """
 
     __abstract__ = True
@@ -143,9 +127,11 @@ class Model(
         """创建时间字段 - 自动添加到启用时间戳的模型中"""
         # 检查是否需要时间戳字段
         global_enabled = cls._get_global_timestamps_enabled()
-        if (global_enabled and 
+        if (
+            global_enabled and 
             hasattr(cls, 'timestamps') and 
-            cls.timestamps):
+            cls.timestamps
+        ):
             return mapped_column(
                 DateTime(timezone=True),
                 default=lambda: datetime.now(timezone.utc),
@@ -160,9 +146,11 @@ class Model(
         """更新时间字段 - 自动添加到启用时间戳的模型中"""
         # 检查是否需要时间戳字段
         global_enabled = cls._get_global_timestamps_enabled()
-        if (global_enabled and 
+        if (
+            global_enabled and 
             hasattr(cls, 'timestamps') and 
-            cls.timestamps):
+            cls.timestamps
+        ):
             return mapped_column(
                 DateTime(timezone=True),
                 default=lambda: datetime.now(timezone.utc),
@@ -246,10 +234,109 @@ class Model(
         # 自动更新 updated_at
         self.set_updated_at(datetime.now(timezone.utc))
 
-    # 通用主键字段（子类可以覆盖）
+    # =================================================================
+    # 自动表名、主键、批量填充
+    # =================================================================
+
+    # 自动表名（下划线+复数），仅在未自定义__tablename__时生效
     @declared_attr
-    def id(cls) -> Mapped[int]:
-        return mapped_column(Integer, primary_key=True, autoincrement=True)
+    def __tablename__(cls) -> str:
+        # 优先使用用户自定义的__tablename__
+        tablename = cls.__dict__.get('__tablename__', None)
+        if tablename is not None:
+            return tablename
+        import re
+        table_name = re.sub(r'(?<!^)(?=[A-Z])', '_', cls.__name__).lower()
+        if table_name.endswith('y'):
+            table_name = table_name[:-1] + 'ies'
+        elif table_name.endswith(('s', 'sh', 'ch', 'x', 'z')):
+            table_name = table_name + 'es'
+        else:
+            table_name = table_name + 's'
+        return table_name
+
+    # 静态声明主键id字段，确保所有子类都继承
+    # id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+
+    def __init__(self, **kwargs):
+        super().__init__()
+        self._attributes = {}
+        self._original = {}
+        self._changes = {}
+        self._exists = False
+        if kwargs:
+            self.fill(kwargs)
+
+    # ========== ThinkORM风格扩展 ========== 
+    # 支持 _casts 类型转换、_fillable 批量赋值、属性获取器/修改器、链式关系、链式作用域
+
+    _casts: ClassVar[dict[str, str]] = {}
+    _fillable: ClassVar[list[str]] = []
+
+    def set_casts(self, casts: dict[str, str]) -> None:
+        self._casts = casts
+
+    def fill(self, data: dict) -> None:
+        # 支持 _fillable 批量赋值
+        fields = self._fillable if hasattr(self, '_fillable') and self._fillable else data.keys()
+        for key in fields:
+            if key in data and hasattr(self, key):
+                value = data[key]
+                # 类型转换
+                if hasattr(self, '_casts') and key in self._casts:
+                    value = self._cast_value(key, value)
+                setattr(self, key, value)
+
+    def _cast_value(self, key: str, value: Any) -> Any:
+        t = self._casts.get(key)
+        if t == 'int':
+            return int(value) if value is not None else None
+        if t == 'bool':
+            return bool(value)
+        if t == 'str':
+            return str(value) if value is not None else None
+        if t == 'datetime':
+            from datetime import datetime
+            if isinstance(value, datetime):
+                return value
+            try:
+                return datetime.fromisoformat(value)
+            except Exception:
+                return value
+        return value
+
+    def __getattr__(self, name: str) -> Any:
+        # 属性获取器: get_xxx_attribute
+        getter = f'get_{name}_attribute'
+        if hasattr(self, getter):
+            return getattr(self, getter)(getattr(self, name, None))
+        raise AttributeError(f"{self.__class__.__name__} object has no attribute '{name}'")
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        # 属性修改器: set_xxx_attribute
+        setter = f'set_{name}_attribute'
+        if hasattr(self, setter):
+            value = getattr(self, setter)(value)
+        super().__setattr__(name, value)
+
+    # 链式作用域支持: scope_xxx
+    @classmethod
+    def __getattr_cls__(cls, name: str):
+        if name.startswith('scope_'):
+            def scope_proxy(*args, **kwargs):
+                return getattr(cls, name)(*args, **kwargs)
+            return scope_proxy
+        raise AttributeError(f"{cls.__name__} has no attribute '{name}'")
+
+    def __getattribute__(self, name: str) -> Any:
+        # 支持链式关系调用
+        try:
+            return super().__getattribute__(name)
+        except AttributeError:
+            # 关系方法优先
+            if hasattr(self, name):
+                return getattr(self, name)()
+            raise
 
     # =================================================================
     # 简洁的创建和查询方法
@@ -372,7 +459,9 @@ class Model(
         """
 
         async def _count(session: AsyncSession) -> int:
-            result = await session.execute(select(func.count()).select_from(cls))
+            result = await session.execute(
+                select(func.count()).select_from(cls)
+            )
             return result.scalar() or 0
 
         return await execute_with_session(_count, connection_type="read")
@@ -453,7 +542,9 @@ class Model(
                 await session.refresh(instance)
             return instances
 
-        return await execute_with_session(_create_many)
+        return await execute_with_session(
+            _create_many
+        )
 
     @classmethod
     async def delete_where(cls: type[T], column: str, value: Any) -> int:
@@ -635,10 +726,14 @@ class Model(
         # 如果启用软删除，使用SoftDeleteQueryBuilder
         if getattr(cls, 'soft_delete', False):
             from fastorm.query.soft_delete import SoftDeleteQueryBuilder
-            return SoftDeleteQueryBuilder(cls).where(column, actual_operator, actual_value)
+            return SoftDeleteQueryBuilder(cls).where(
+                column, actual_operator, actual_value
+            )
         else:
             from fastorm.query.builder import QueryBuilder
-            return QueryBuilder(cls).where(column, actual_operator, actual_value)
+            return QueryBuilder(cls).where(
+                column, actual_operator, actual_value
+            )
 
     @classmethod
     def with_trashed(cls: type[T]):
@@ -733,3 +828,39 @@ class Model(
                     result[column.name] = value
 
         return result
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        # 只保留主键/伪主键校验逻辑，无需再自动识别_fastorm_field
+        has_primary_key = False
+        # 检查是否有mapped_column定义的主键
+        for attr_name in dir(cls):
+            attr_value = getattr(cls, attr_name, None)
+            if hasattr(attr_value, 'property') and hasattr(attr_value.property, 'columns'):
+                for column in attr_value.property.columns:
+                    if getattr(column, 'primary_key', False):
+                        has_primary_key = True
+                        break
+                if has_primary_key:
+                    break
+        has_mapper_pk = (
+            hasattr(cls, '__mapper_args__') and
+            isinstance(cls.__mapper_args__, dict) and
+            'primary_key' in cls.__mapper_args__
+        )
+        if (
+            not getattr(cls, '__abstract__', False)
+            and not has_primary_key
+            and not has_mapper_pk
+        ):
+            msg = (
+                "FastORM: 检测到模型 "
+                + f"{cls.__name__} 未声明主键字段，\n"
+                + "也未指定伪主键（__mapper_args__['primary_key']）。\n"
+                + "请为模型添加主键字段，或通过__mapper_args__声明伪主键，\n"
+                + "如：\n"
+                + "    id: Mapped[int] = Field(primary_key=True, type_=int)\n"
+                + "或：\n"
+                + "    __mapper_args__ = {'primary_key': ['col1', 'col2']}"
+            )
+            raise RuntimeError(msg)

@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select
 from sqlalchemy import text
+from sqlalchemy import Table
 
 from fastorm.core.session_manager import execute_with_session
 
@@ -90,23 +91,28 @@ class BelongsToMany(Relation[list[Any]]):
         foreign_key = self.get_foreign_key(parent)
         related_key = self.get_related_key()
 
-        # 构建联合查询
+        # 通过run_sync反射Table，兼容AsyncSession
+        def get_pivot_table(sync_conn):
+            metadata = self.model_class.metadata
+            return Table(pivot_table, metadata, autoload_with=sync_conn)
+
+        sync_conn = await session.connection()
+        pivot = await sync_conn.run_sync(get_pivot_table)
+
         query = (
             select(self.model_class)
             .select_from(
                 self.model_class.__table__.join(
-                    text(pivot_table),
+                    pivot,
                     getattr(self.model_class, self.related_local_key)
-                    == text(f"{pivot_table}.{related_key}"),
+                    == getattr(pivot.c, related_key),
                 )
             )
-            .where(text(f"{pivot_table}.{foreign_key}") == local_key_value)
+            .where(getattr(pivot.c, foreign_key) == local_key_value)
         )
 
-        # 执行查询
         result = await session.execute(query)
         instances = list(result.scalars().all())
-
         return instances
 
     def get_pivot_table(self, parent: Any) -> str:

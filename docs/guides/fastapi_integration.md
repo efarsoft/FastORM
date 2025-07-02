@@ -647,4 +647,22 @@ asyncpg>=0.29.0  # PostgreSQL
 python-multipart
 ```
 
+## FastORM 支持无主键表/视图的最佳实践
+
+对于无主键表/视图，推荐如下声明方式：
+
+```python
+class MyView(Model):
+    __tablename__ = "my_view"
+    col1: Mapped[str]
+    col2: Mapped[int]
+    col3: Mapped[str]
+
+    __mapper_args__ = {
+        "primary_key": [col1, col2]  # 伪主键声明
+    }
+```
+- 只要`col1+col2`能唯一标识一行即可。
+- 若未声明主键，FastORM会在模型加载时报错并给出友好提示。
+
 通过这个完整的集成指南，你可以在FastAPI项目中充分利用FastORM的所有功能，包括简洁的模型API、强大的验证系统、高效的序列化和批量操作能力。 
